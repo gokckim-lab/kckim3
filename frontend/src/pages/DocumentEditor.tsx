@@ -5,11 +5,13 @@ import { useToast } from '../context/ToastContext';
 import PartyForm from '../components/PartyForm';
 import ItemTable from '../components/ItemTable';
 import PrintableDocument from '../components/PrintableDocument';
+import OrderDocUpload from '../components/OrderDocUpload';
 import { fetchCustomers } from '../lib/customers';
 import { fetchProfile } from '../lib/profile';
 import { createDocument, fetchDocument, updateDocument, NEXT_TYPE } from '../lib/documents';
 import { issueTaxInvoice, getTaxInvoicePopupUrl, resendTaxInvoiceEmail } from '../lib/backendApi';
 import { fetchMyWallet } from '../lib/wallet';
+import type { OrderDocResult } from '../lib/orderDocExtract';
 import type { CustomerRecord, DocType, DocumentItem, DocumentRecord, PartyInfo } from '../types';
 import { DOC_TYPE_LABEL, emptyParty } from '../types';
 
@@ -101,6 +103,27 @@ export default function DocumentEditor() {
         bizNo: c.biz_no, name: c.name, ceo: c.ceo, address: c.address, bizType: c.biz_type,
         bizItem: c.biz_item, email: c.email, tel: c.tel, contact: c.contact, purposeType: '영수', taxType: '과세',
       });
+    }
+  };
+
+  const handleOrderDocImport = (result: OrderDocResult) => {
+    // 추출 못한 항목(빈 문자열)으로 기존 값을 덮어쓰지 않도록 채워진 필드만 병합한다.
+    const merge = (base: PartyInfo, extracted: Partial<PartyInfo>): PartyInfo => {
+      const next = { ...base };
+      for (const [k, v] of Object.entries(extracted)) {
+        if (v && String(v).trim()) (next as any)[k] = v;
+      }
+      return next;
+    };
+    if (Object.values(result.customer).some((v) => v && String(v).trim())) {
+      setCustomer((prev) => merge(prev, result.customer));
+      setCustomerId(null); // 불러온 정보로 새로 채웠으니 "등록된 거래처" 선택은 해제한다
+    }
+    if (Object.values(result.supplier).some((v) => v && String(v).trim())) {
+      setSupplier((prev) => merge(prev, result.supplier));
+    }
+    if (result.items.length > 0) {
+      setItems(result.items);
     }
   };
 
@@ -234,6 +257,16 @@ export default function DocumentEditor() {
           </button>
         </div>
       </div>
+
+      {(type === 'delivery' || type === 'tax_invoice') && !issued && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between print:hidden">
+          <div className="text-sm text-blue-900">
+            <div className="font-medium">거래처가 보낸 {type === 'delivery' ? '견적서·주문서' : '견적서·주문서·거래명세서'} PDF가 있나요?</div>
+            <div className="text-xs text-blue-700 mt-0.5">업로드하면 거래처 정보와 품목표를 자동으로 채워줍니다.</div>
+          </div>
+          <OrderDocUpload label={type === 'delivery' ? '견적서/주문서' : '견적서/주문서/거래명세서'} onExtracted={handleOrderDocImport} />
+        </div>
+      )}
 
       {doc?.popbill_status === 'FAILED' && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-md p-3 print:hidden">
