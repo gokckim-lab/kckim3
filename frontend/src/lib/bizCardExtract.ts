@@ -131,52 +131,77 @@ const normalizeBizNo = (raw: string): string => {
   return raw;
 };
 
-// 값 뒤에 다른 라벨이 바로 붙어있는 실제 사업자등록증 레이아웃을 감안해,
-// 값 추출 시 "다음에 나올 수 있는 라벨들" 앞에서 잘라낸다.
-const STOP_LABELS =
-  '(?=상호|법인명|성명|대표자|생년월일|개업연월일|사업장|소재지|본점|사업의\\s*종류|업태|종목|공동사업자|교부사유|전화|e-?mail|이메일|$)';
+// 국세청 홈택스 등 공문서는 라벨을 "사 업 자 등 록 번 호"처럼 한 글자씩 띄어 쓰는 경우가 많다.
+// 글자+공백이 3번 이상 반복되는 구간(=자간 벌린 라벨/값)만 골라 내부 공백을 제거한다.
+// (정상적인 여러 단어 문장은 글자 하나짜리 토큰이 이렇게 연속으로 나오지 않으므로 오탐 위험이 낮다)
+function collapseSpacedOutText(text: string): string {
+  // 반복 2회 미만(즉, 공백을 사이에 둔 두 글자짜리 토큰 하나)은 정상 문장의 단어 경계와
+  // 구분이 안 돼 오탐이 나므로 다루지 않는다 (업태/종목 같은 2글자 라벨은 아래에서 \s*로 별도 대응).
+  return text.replace(/((?:[^\s\n][ \t]){2,}[^\s\n])/g, (run) => run.replace(/[ \t]+/g, ''));
+}
 
-function captureAfterLabel(text: string, labelPattern: string): string {
-  // labelPattern이 "A|B" 형태의 교대(alternation)일 수 있으므로 반드시 그룹으로 감싸야
-  // 뒤에 붙는 "값 캡처 + STOP_LABELS" 부분이 모든 대안에 공통 적용된다.
-  const re = new RegExp(`(?:${labelPattern})\\s*[:：]?\\s*([^\\n]+?)\\s*${STOP_LABELS}`, 'i');
-  const m = text.match(re);
-  return m?.[1]?.trim() ?? '';
+// 텍스트를 줄 단위로 순회하며 라벨이 "줄의 시작 부분"에 오는 줄을 찾아 그 줄의 나머지를 값으로 캡처한다.
+// (이전 버전은 STOP_LABELS를 이용한 lazy capture + lookahead 조합이었는데, 뒤따르는 줄에 정지 키워드가
+//  하나도 없으면 정규식 전체가 매칭 실패(null)로 돌아가는 구조적 버그가 있었다. 줄 단위 탐색은 그런 실패가 없다.)
+function findLineValue(lines: string[], labelPattern: string): { value: string; index: number } | null {
+  const re = new RegExp(`^\\s*(?:${labelPattern})\\s*[:：]?\\s*(.*)$`, 'i');
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(re);
+    if (m) return { value: m[1].trim(), index: i };
+  }
+  return null;
+}
+
+// 값이 없고 라벨만 있는 줄(표 형식 레이아웃에서 값이 앞줄에 먼저 나오는 경우)이면 바로 이전 줄을 값으로 대신 쓴다.
+function findLabelValueWithPrevFallback(lines: string[], labelPattern: string): string {
+  const found = findLineValue(lines, labelPattern);
+  if (!found) return '';
+  if (found.value) return found.value;
+  for (let i = found.index - 1; i >= 0; i--) {
+    const prev = lines[i].trim();
+    if (prev) return prev;
+  }
+  return '';
 }
 
 export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
   if (!rawText || rawText.trim().length < 2) return {};
   try {
-    const text = rawText.replace(/\r/g, '');
+    const normalized = collapseSpacedOutText(rawText.replace(/\r/g, ''));
+    const lines = normalized.split('\n').map((l) => l.trim()).filter(Boolean);
 
     const bizNoMatch =
-      text.match(/등록\s*번호\s*[:：]?\s*(\d{3}[-\s]?\d{2}[-\s]?\d{5})/) ||
-      text.match(/(\d{3}-\d{2}-\d{5})/) ||
-      text.match(/(?<!\d)(\d{10})(?!\d)/);
+      normalized.match(/등록번호\s*[:：]?\s*(\d{3}[-\s]?\d{2}[-\s]?\d{5})/) ||
+      normalized.match(/(\d{3}-\d{2}-\d{5})/) ||
+      normalized.match(/(?<!\d)(\d{10})(?!\d)/);
     const bizNo = bizNoMatch ? normalizeBizNo(bizNoMatch[1]) : '';
 
-    let name = captureAfterLabel(text, '상\\s*호\\s*(?:\\(\\s*법인명\\s*\\))?');
+    let name = findLabelValueWithPrevFallback(lines, '상호\\s*(?:\\(법인명\\))?');
     if (!name) {
-      const m = text.match(/\(주\)[^\n]{1,30}|주식회사[^\n]{1,20}|[^\n]{1,20}\s*(?:주식회사|㈜)/);
+      const m = normalized.match(/\(주\)[^\n]{1,30}|주식회사[^\n]{1,20}|[^\n]{1,20}\s*(?:주식회사|㈜)/);
       if (m) name = m[0].trim();
     }
+    // "버디 (법인명)" 처럼 라벨 잔재가 값 앞에 남는 경우를 대비해 선행 괄호 라벨을 한 번 더 제거
+    name = name.replace(/^\(?법인명\)?\s*/, '').trim();
 
-    const ceo = captureAfterLabel(text, '성\\s*명\\s*(?:\\(\\s*대표자\\s*\\))?|대표자\\s*(?:성명)?');
+    let ceo = findLabelValueWithPrevFallback(lines, '성명\\s*(?:\\(대표자\\))?|대표자\\s*성명(?:\\([^)]*\\))?|대표자');
+    ceo = ceo.replace(/^\([^)]*\)\s*/, '').split(/\s{2,}|\t/)[0].trim();
 
-    let address = captureAfterLabel(text, '사업장\\s*소재지|소\\s*재\\s*지|본점\\s*소재지');
+    let address = findLabelValueWithPrevFallback(lines, '사업장\\s*소재지|소재지|본점\\s*소재지');
     if (!address) {
-      const m = text.match(/(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]{5,60}/);
+      const m = normalized.match(/(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]{5,60}/);
       if (m) address = m[0].trim();
     }
 
-    // "사업의 종류  업태  OOO   종목  OOO" 한 줄에 같이 있는 경우가 많다
-    let bizType = captureAfterLabel(text, '업\\s*태');
-    let bizItem = captureAfterLabel(text, '종\\s*목');
+    let bizType = findLabelValueWithPrevFallback(lines, '업\\s*태');
+    let bizItem = findLabelValueWithPrevFallback(lines, '종\\s*목');
+    // "도매업 종목 사무용품"처럼 업태 값 뒤에 다음 라벨(종목)이 같은 줄에 붙어 나오면 거기서 잘라낸다
+    bizType = bizType.split(/\s*종\s*목\s*/)[0].trim();
 
-    const emailMatch = text.match(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/);
+    const emailMatch = normalized.match(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/);
     const email = emailMatch?.[1] ?? '';
 
-    const telMatch = text.match(/(?:전화|TEL|Tel)\s*[:：]?\s*(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
+    const telMatch = normalized.match(/(?:전화|TEL|Tel)\s*[:：]?\s*(\d{2,3}[-\s]?\d{3,4}[-\s]?\d{4})/);
     const tel = telMatch ? telMatch[1].replace(/\s/g, '-') : '';
 
     return { bizNo, name, ceo, address, bizType, bizItem, email, tel };
