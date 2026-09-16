@@ -1,0 +1,70 @@
+import { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { fetchProfile, saveProfile, type CompanyProfile as CompanyProfileType } from '../lib/profile';
+import PartyForm from '../components/PartyForm';
+import { emptyParty } from '../types';
+
+export default function CompanyProfile() {
+  const { user } = useAuth();
+  const notify = useToast();
+  const [profile, setProfile] = useState<CompanyProfileType>({ ...emptyParty(), bank_name: '', bank_account: '', bank_holder: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchProfile(user.id).then(setProfile).catch((e) => notify(e.message, 'error')).finally(() => setLoading(false));
+  }, [user]);
+
+  const save = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      await saveProfile(user.id, profile);
+      notify('회사 정보를 저장했습니다.', 'success');
+    } catch (e: any) {
+      notify(e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center text-slate-400">불러오는 중...</div>;
+
+  return (
+    <div className="max-w-3xl mx-auto p-6 space-y-4">
+      <h1 className="text-xl font-bold text-slate-800">회사 정보 (공급자)</h1>
+      <p className="text-sm text-slate-500">
+        문서를 만들 때 공급자 정보로 자동 입력됩니다. 사업자등록증 PDF를 올려서 자동으로 채울 수 있습니다.
+      </p>
+      <PartyForm title="우리 회사" value={profile} onChange={(v) => setProfile({ ...profile, ...v })} />
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800 mb-3">입금 계좌 (거래명세서/견적서 표기용)</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            은행
+            <input className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={profile.bank_name}
+              onChange={(e) => setProfile({ ...profile, bank_name: e.target.value })} />
+          </label>
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            계좌번호
+            <input className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={profile.bank_account}
+              onChange={(e) => setProfile({ ...profile, bank_account: e.target.value })} />
+          </label>
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            예금주
+            <input className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={profile.bank_holder}
+              onChange={(e) => setProfile({ ...profile, bank_holder: e.target.value })} />
+          </label>
+        </div>
+      </div>
+
+      <button onClick={save} disabled={saving}
+        className="bg-slate-900 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-slate-800 disabled:opacity-60">
+        {saving ? '저장 중...' : '저장'}
+      </button>
+    </div>
+  );
+}

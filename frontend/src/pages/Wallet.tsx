@@ -1,0 +1,134 @@
+import { useEffect, useState } from 'react';
+import { useToast } from '../context/ToastContext';
+import { fetchMyWallet, fetchMyTransactions, requestDeposit } from '../lib/wallet';
+import CardChargeWidget from '../components/CardChargeWidget';
+import type { Wallet as WalletType, WalletTransaction } from '../types/wallet';
+
+const PRESET_AMOUNTS = [10000, 30000, 50000, 100000];
+
+const TYPE_LABEL: Record<string, string> = { deposit_request: '충전 신청', issue_deduct: '세금계산서 발행 차감', refund: '환불' };
+const STATUS_LABEL: Record<string, string> = { pending: '승인 대기', approved: '완료', rejected: '반려' };
+const STATUS_STYLE: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700',
+  approved: 'bg-emerald-100 text-emerald-700',
+  rejected: 'bg-rose-100 text-rose-700',
+};
+
+export default function Wallet() {
+  const notify = useToast();
+  const [wallet, setWallet] = useState<WalletType | null>(null);
+  const [txs, setTxs] = useState<WalletTransaction[]>([]);
+  const [amount, setAmount] = useState(50000);
+  const [depositorName, setDepositorName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [cardAmount, setCardAmount] = useState(50000);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [w, t] = await Promise.all([fetchMyWallet(), fetchMyTransactions()]);
+      setWallet(w);
+      setTxs(t);
+    } catch (e: any) {
+      notify(e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const submit = async () => {
+    if (amount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
+    if (!depositorName.trim()) return notify('입금자명을 입력해주세요.', 'warning');
+    setSubmitting(true);
+    try {
+      await requestDeposit(amount, depositorName);
+      notify('충전 신청이 접수되었습니다. 입금 확인 후 관리자가 승인하면 잔액에 반영됩니다.', 'success');
+      setDepositorName('');
+      load();
+    } catch (e: any) {
+      notify(e.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto p-6 space-y-4">
+      <h1 className="text-xl font-bold text-slate-800">포인트 지갑</h1>
+      <p className="text-sm text-slate-500">
+        견적서 · 주문서 · 거래명세서는 무료입니다. 세금계산서를 팝빌로 <b>발행</b>할 때만 건당 포인트가 차감됩니다.
+        무통장입금으로 충전 신청을 하면 확인 후 반영됩니다.
+      </p>
+
+      <div className="bg-slate-900 text-white rounded-xl p-6 flex items-center justify-between">
+        <span className="text-slate-300">현재 잔액</span>
+        <span className="text-3xl font-bold">{loading ? '...' : (wallet?.balance ?? 0).toLocaleString('ko-KR')} P</span>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800 mb-1">카드로 즉시 충전</h3>
+        <p className="text-xs text-slate-400 mb-3">결제 승인 즉시 잔액에 자동 반영됩니다 (토스페이먼츠).</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {PRESET_AMOUNTS.map((v) => (
+            <button key={v} type="button" onClick={() => setCardAmount(v)}
+              className={`px-3 py-1.5 rounded-md text-sm border ${cardAmount === v ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>
+              {v.toLocaleString('ko-KR')}원
+            </button>
+          ))}
+          <input type="number" step={1000} className="w-32 border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+            value={cardAmount} onChange={(e) => setCardAmount(Number(e.target.value))} />
+        </div>
+        <CardChargeWidget amount={cardAmount} />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800 mb-3">충전 신청 (무통장입금)</h3>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            충전 금액
+            <input type="number" step={10000} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+              value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+          </label>
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            입금자명
+            <input className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={depositorName}
+              onChange={(e) => setDepositorName(e.target.value)} placeholder="실제 입금하시는 분 성함" />
+          </label>
+        </div>
+        <button onClick={submit} disabled={submitting}
+          className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm hover:bg-slate-800 disabled:opacity-60">
+          {submitting ? '신청 중...' : '충전 신청'}
+        </button>
+      </div>
+
+      <div>
+        <h3 className="font-semibold text-slate-800 mb-2">거래 내역</h3>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500 text-xs">
+              <tr>
+                <th className="p-2 text-left">일시</th>
+                <th className="p-2 text-left">구분</th>
+                <th className="p-2 text-right">금액</th>
+                <th className="p-2 text-left">상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              {txs.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-slate-400">내역이 없습니다.</td></tr>}
+              {txs.map((t) => (
+                <tr key={t.id} className="border-t border-slate-100">
+                  <td className="p-2 text-slate-500">{new Date(t.created_at).toLocaleString('ko-KR')}</td>
+                  <td className="p-2">{TYPE_LABEL[t.type]}</td>
+                  <td className="p-2 text-right">{t.type === 'deposit_request' || t.type === 'refund' ? '+' : '-'}{t.amount.toLocaleString('ko-KR')}</td>
+                  <td className="p-2"><span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_STYLE[t.status]}`}>{STATUS_LABEL[t.status]}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

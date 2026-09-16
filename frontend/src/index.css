@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable, .printable * {
+    visibility: visible;
+  }
+  .printable {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+}
