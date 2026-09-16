@@ -30,6 +30,7 @@ export const emptyParty = (): PartyInfo => ({
 
 export interface DocumentItem {
   id?: string;
+  document_id?: string;
   sort_order: number;
   name: string;
   spec: string;

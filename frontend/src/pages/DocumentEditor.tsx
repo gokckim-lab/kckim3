@@ -74,7 +74,11 @@ export default function DocumentEditor() {
           setSupplier(src.supplier);
           setCustomer(src.customer);
           setCustomerId(src.customer_id);
-          setItems((src.document_items ?? []).map((it, idx) => ({ ...it, id: undefined, sort_order: idx })));
+          // id/document_id는 원본 문서(견적서 등) 것이므로 그대로 두면 안 된다. 특히 id를 값 없이
+          // (undefined로) 남겨두면 supabase-js가 insert 시 "id 컬럼에 값을 넣겠다"고 선언해버려서
+          // 실제로는 NULL이 들어가 not-null 제약조건 위반(23502)으로 저장이 통째로 실패한다.
+          // 반드시 키 자체를 지워서 DB가 새 id를 기본값(gen_random_uuid())으로 채우게 해야 한다.
+          setItems((src.document_items ?? []).map(({ id: _id, document_id: _documentId, ...rest }, idx) => ({ ...rest, sort_order: idx })));
           setMemo(src.memo);
         } else {
           const profile = await fetchProfile(user.id);
