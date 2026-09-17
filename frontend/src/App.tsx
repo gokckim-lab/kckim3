@@ -11,6 +11,7 @@ import DocumentList from './pages/DocumentList';
 import DocumentEditor from './pages/DocumentEditor';
 import Wallet from './pages/Wallet';
 import AdminDeposits from './pages/AdminDeposits';
+import AdminUsers from './pages/AdminUsers';
 
 function Shell() {
   const { user } = useAuth();
@@ -25,6 +26,7 @@ function Shell() {
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
         <Route path="/admin/deposits" element={<ProtectedRoute><AdminDeposits /></ProtectedRoute>} />
+        <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="/documents/:type" element={<ProtectedRoute><DocumentList /></ProtectedRoute>} />
         <Route path="/documents/:type/:id" element={<ProtectedRoute><DocumentEditor /></ProtectedRoute>} />
       </Routes>

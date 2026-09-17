@@ -407,3 +407,45 @@ begin
   return v_balance;
 end;
 $$;
+
+-- ----------------------------------------------------------------------
+-- 관리자용: 전체 가입자 목록 (가입일/최근 로그인은 profiles에 없고 auth.users에만
+-- 있어서, SECURITY DEFINER 함수로 auth.users를 조인해 관리자에게만 노출한다.
+-- ----------------------------------------------------------------------
+create or replace function public.admin_list_subscribers()
+returns table (
+  id uuid,
+  email text,
+  name text,
+  biz_no text,
+  ceo text,
+  is_admin boolean,
+  balance numeric,
+  created_at timestamptz,
+  last_sign_in_at timestamptz
+)
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.is_admin) then
+    raise exception '관리자만 조회할 수 있습니다.';
+  end if;
+
+  return query
+    select
+      p.id,
+      coalesce(nullif(p.email, ''), u.email) as email,
+      p.name,
+      p.biz_no,
+      p.ceo,
+      p.is_admin,
+      coalesce(w.balance, 0) as balance,
+      u.created_at,
+      u.last_sign_in_at
+    from public.profiles p
+    join auth.users u on u.id = p.id
+    left join public.wallets w on w.owner_id = p.id
+    order by u.created_at desc;
+end;
+$$;
+
+grant execute on function public.admin_list_subscribers() to authenticated;
