@@ -95,7 +95,8 @@ export default function Wallet() {
             </button>
           ))}
           <input type="number" step={1000} className="w-32 border border-slate-300 rounded-md px-2 py-1.5 text-sm"
-            value={cardAmount} onChange={(e) => setCardAmount(Number(e.target.value))} />
+            value={cardAmount === 0 ? '' : cardAmount}
+            onChange={(e) => setCardAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
         </div>
         <NicePayChargeButton amount={cardAmount} />
       </div>
@@ -109,7 +110,8 @@ export default function Wallet() {
           <label className="text-xs text-slate-500 flex flex-col gap-1">
             충전 금액
             <input type="number" step={10000} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm"
-              value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+              value={amount === 0 ? '' : amount}
+              onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
           </label>
           <label className="text-xs text-slate-500 flex flex-col gap-1">
             입금자명
