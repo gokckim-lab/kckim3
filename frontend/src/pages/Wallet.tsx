@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { fetchMyWallet, fetchMyTransactions, requestDeposit } from '../lib/wallet';
+import { issueVirtualAccount, type VirtualAccountResult } from '../lib/backendApi';
 import NicePayChargeButton from '../components/NicePayChargeButton';
 import type { Wallet as WalletType, WalletTransaction } from '../types/wallet';
 
@@ -25,6 +26,9 @@ export default function Wallet() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cardAmount, setCardAmount] = useState(50000);
+  const [vaAmount, setVaAmount] = useState(50000);
+  const [vaIssuing, setVaIssuing] = useState(false);
+  const [vaResult, setVaResult] = useState<VirtualAccountResult | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -54,6 +58,22 @@ export default function Wallet() {
     setParams((prev) => { prev.delete('nicepay'); prev.delete('amount'); prev.delete('reason'); return prev; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const issueVa = async () => {
+    if (vaAmount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
+    setVaIssuing(true);
+    try {
+      const result = await issueVirtualAccount(vaAmount);
+      setVaResult(result);
+    } catch (e: any) {
+      notify(e.message, 'error');
+    } finally {
+      setVaIssuing(false);
+    }
+  };
+
+  const fmtVaExpire = (r: VirtualAccountResult) =>
+    `${r.expireDate.slice(0, 4)}-${r.expireDate.slice(4, 6)}-${r.expireDate.slice(6, 8)} ${r.expireTime.slice(0, 2)}:${r.expireTime.slice(2, 4)}`;
 
   const submit = async () => {
     if (amount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
@@ -102,7 +122,33 @@ export default function Wallet() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <h3 className="font-semibold text-slate-800 mb-3">충전 신청 (무통장입금)</h3>
+        <h3 className="font-semibold text-slate-800 mb-1">가상계좌로 충전 (자동 반영)</h3>
+        <p className="text-xs text-slate-400 mb-3">충전 신청마다 1회용 입금 계좌가 발급됩니다. 그 계좌로 입금하면 관리자 승인 없이 자동으로 잔액에 반영됩니다.</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {PRESET_AMOUNTS.map((v) => (
+            <button key={v} type="button" onClick={() => setVaAmount(v)}
+              className={`px-3 py-1.5 rounded-md text-sm border ${vaAmount === v ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>
+              {v.toLocaleString('ko-KR')}원
+            </button>
+          ))}
+          <input type="number" step={1000} className="w-32 border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+            value={vaAmount === 0 ? '' : vaAmount}
+            onChange={(e) => setVaAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
+        </div>
+        <button onClick={issueVa} disabled={vaIssuing}
+          className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm hover:bg-slate-800 disabled:opacity-60">
+          {vaIssuing ? '발급 중...' : `${vaAmount.toLocaleString('ko-KR')}원 가상계좌 발급받기`}
+        </button>
+        {vaResult && (
+          <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2 text-sm text-emerald-800">
+            <b>{vaResult.bankName} {vaResult.accountNum}</b>로 <b>{vaResult.amount.toLocaleString('ko-KR')}원</b> 입금해주세요.
+            <br />입금 기한: {fmtVaExpire(vaResult)}까지 (이후 만료)
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800 mb-3">충전 신청 (무통장입금 · 관리자 확인 필요)</h3>
         <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2 mb-3 text-sm text-slate-700">
           입금 계좌: <b>신한은행 110-429-632870</b> (예금주: 김기천)
         </div>

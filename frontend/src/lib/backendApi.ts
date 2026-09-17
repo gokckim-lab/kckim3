@@ -58,3 +58,22 @@ export async function getTaxInvoicePopupUrl(documentId: string): Promise<string>
   const body = await handle(res);
   return body.url;
 }
+
+export interface VirtualAccountResult {
+  ok: true;
+  bankName: string;
+  accountNum: string;
+  expireDate: string; // YYYYMMDD
+  expireTime: string; // HHMISS
+  amount: number;
+}
+
+export async function issueVirtualAccount(amount: number): Promise<VirtualAccountResult> {
+  const headers = await authHeaders();
+  const res = await fetch(`${BASE_URL}/api/payments/nicepay/virtual-account/issue`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ amount }),
+  });
+  return handle(res);
+}

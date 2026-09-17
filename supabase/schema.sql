@@ -387,6 +387,33 @@ create policy "nicepay_payments: owner read" on public.nicepay_payments
 -- insert는 항상 backend(service_role)에서만 하므로(카드결제 승인 API를 서버에서만 호출)
 -- 별도의 insert 정책을 두지 않는다 = 일반 사용자는 직접 쓸 수 없다.
 
+-- ----------------------------------------------------------------------
+-- 나이스페이 가상계좌 충전: 사장님이 자리를 비워도 입금이 자동으로 잔액에
+-- 반영되도록(관리자 수동승인 불필요), 충전 신청마다 일회성 계좌번호를 발급하고
+-- 나이스페이가 입금 완료를 웹훅으로 통보하면 자동으로 크레딧한다.
+-- ----------------------------------------------------------------------
+create table if not exists public.nicepay_virtual_accounts (
+  moid text primary key,             -- 가맹점 주문번호 (우리가 생성)
+  tid text not null,                 -- 나이스페이 거래 ID
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  amount numeric not null,
+  bank_name text,
+  account_num text,
+  expire_date date,
+  status text not null default 'issued' check (status in ('issued', 'paid', 'expired', 'canceled')),
+  created_at timestamptz default now(),
+  paid_at timestamptz
+);
+create index if not exists nicepay_va_owner_idx on public.nicepay_virtual_accounts(owner_id);
+
+alter table public.nicepay_virtual_accounts enable row level security;
+
+drop policy if exists "nicepay_va: owner read" on public.nicepay_virtual_accounts;
+create policy "nicepay_va: owner read" on public.nicepay_virtual_accounts
+  for select using (auth.uid() = owner_id);
+
+-- insert/update는 backend(service_role) 전용 (발급 API 호출 시, 입금 웹훅 수신 시).
+
 -- 포인트 적립 (service_role 백엔드 전용: 카드결제 승인 후 호출)
 create or replace function public.wallet_credit(p_owner_id uuid, p_amount numeric, p_memo text)
 returns numeric
