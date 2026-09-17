@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
 import { fetchMyWallet, fetchMyTransactions, requestDeposit } from '../lib/wallet';
-import CardChargeWidget from '../components/CardChargeWidget';
+import NicePayChargeButton from '../components/NicePayChargeButton';
 import type { Wallet as WalletType, WalletTransaction } from '../types/wallet';
 
 const PRESET_AMOUNTS = [10000, 30000, 50000, 100000];
@@ -16,6 +17,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function Wallet() {
   const notify = useToast();
+  const [params, setParams] = useSearchParams();
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [txs, setTxs] = useState<WalletTransaction[]>([]);
   const [amount, setAmount] = useState(50000);
@@ -37,6 +39,21 @@ export default function Wallet() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  // 나이스페이 결제 후 backend가 /wallet?nicepay=success|fail 로 돌려보낸다.
+  useEffect(() => {
+    const status = params.get('nicepay');
+    if (!status) return;
+    if (status === 'success') {
+      const amt = params.get('amount');
+      notify(`카드 충전이 완료됐습니다${amt ? ` (${Number(amt).toLocaleString('ko-KR')}원)` : ''}.`, 'success');
+      load();
+    } else if (status === 'fail') {
+      notify(`카드 충전에 실패했습니다: ${params.get('reason') || '알 수 없는 오류'}`, 'error');
+    }
+    setParams((prev) => { prev.delete('nicepay'); prev.delete('amount'); prev.delete('reason'); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async () => {
     if (amount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
@@ -69,7 +86,7 @@ export default function Wallet() {
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <h3 className="font-semibold text-slate-800 mb-1">카드로 즉시 충전</h3>
-        <p className="text-xs text-slate-400 mb-3">결제 승인 즉시 잔액에 자동 반영됩니다 (토스페이먼츠).</p>
+        <p className="text-xs text-slate-400 mb-3">결제 승인 즉시 잔액에 자동 반영됩니다 (나이스페이).</p>
         <div className="flex flex-wrap gap-2 mb-3">
           {PRESET_AMOUNTS.map((v) => (
             <button key={v} type="button" onClick={() => setCardAmount(v)}
@@ -80,11 +97,14 @@ export default function Wallet() {
           <input type="number" step={1000} className="w-32 border border-slate-300 rounded-md px-2 py-1.5 text-sm"
             value={cardAmount} onChange={(e) => setCardAmount(Number(e.target.value))} />
         </div>
-        <CardChargeWidget amount={cardAmount} />
+        <NicePayChargeButton amount={cardAmount} />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <h3 className="font-semibold text-slate-800 mb-3">충전 신청 (무통장입금)</h3>
+        <div className="bg-slate-50 border border-slate-200 rounded-md px-3 py-2 mb-3 text-sm text-slate-700">
+          입금 계좌: <b>신한은행 110-429-632870</b> (예금주: 김기천)
+        </div>
         <div className="grid grid-cols-2 gap-3 mb-3">
           <label className="text-xs text-slate-500 flex flex-col gap-1">
             충전 금액

@@ -346,12 +346,12 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------
--- 카드결제(토스페이먼츠) 자동충전. 무통장입금(관리자 승인) 방식과 별개로,
+-- 카드결제(나이스페이) 자동충전. 무통장입금(관리자 승인) 방식과 별개로,
 -- 결제 승인이 되는 즉시 wallets.balance 에 자동 반영된다.
+-- (예전에 토스페이먼츠로 시작했다가 연회비 문제로 나이스페이로 교체함.
+--  기존 toss_payments 테이블은 과거 기록 보존을 위해 남겨두되 더 이상 쓰지 않는다.)
 -- ----------------------------------------------------------------------
 
--- 이미 처리한 결제(paymentKey)를 기록해서, confirm API가 중복 호출돼도
--- 포인트가 두 번 적립되지 않도록 막는다(멱등성 보장).
 create table if not exists public.toss_payments (
   payment_key text primary key,
   order_id text not null,
@@ -367,7 +367,24 @@ drop policy if exists "toss_payments: owner read" on public.toss_payments;
 create policy "toss_payments: owner read" on public.toss_payments
   for select using (auth.uid() = owner_id);
 
--- insert는 항상 backend(service_role)에서만 하므로(토스 결제 승인 API를 서버에서만 호출)
+-- 이미 처리한 결제(tid)를 기록해서, returnUrl 콜백이 중복 도착해도
+-- 포인트가 두 번 적립되지 않도록 막는다(멱등성 보장).
+create table if not exists public.nicepay_payments (
+  tid text primary key,
+  order_id text not null,
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  amount numeric not null,
+  created_at timestamptz default now()
+);
+create index if not exists nicepay_payments_owner_idx on public.nicepay_payments(owner_id);
+
+alter table public.nicepay_payments enable row level security;
+
+drop policy if exists "nicepay_payments: owner read" on public.nicepay_payments;
+create policy "nicepay_payments: owner read" on public.nicepay_payments
+  for select using (auth.uid() = owner_id);
+
+-- insert는 항상 backend(service_role)에서만 하므로(카드결제 승인 API를 서버에서만 호출)
 -- 별도의 insert 정책을 두지 않는다 = 일반 사용자는 직접 쓸 수 없다.
 
 -- 포인트 적립 (service_role 백엔드 전용: 카드결제 승인 후 호출)
