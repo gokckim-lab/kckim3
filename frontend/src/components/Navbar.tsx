@@ -10,6 +10,7 @@ const LINKS = [
   { to: '/products', label: '품목' },
   { to: '/wallet', label: '포인트' },
   { to: '/profile', label: '회사정보' },
+  { to: '/contact', label: '문의하기' },
 ];
 
 export default function Navbar() {

@@ -77,3 +77,13 @@ export async function issueVirtualAccount(amount: number): Promise<VirtualAccoun
   });
   return handle(res);
 }
+
+export async function sendContactMessage(subject: string, message: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${BASE_URL}/api/contact`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ subject, message }),
+  });
+  return handle(res);
+}
