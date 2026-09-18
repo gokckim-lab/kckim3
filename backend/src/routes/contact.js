@@ -1,26 +1,22 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
 const { requireAuth } = require('../requireAuth');
 const { supabaseAdmin } = require('../supabaseAdmin');
 
 const router = express.Router();
 
-const GMAIL_USER = process.env.GMAIL_USER;
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
-
-function getTransporter() {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
-  });
-}
+// Railway 같은 클라우드 호스팅은 스팸 방지 목적으로 SMTP(25/465/587) 아웃바운드를 막아두는
+// 경우가 많아 nodemailer+Gmail SMTP 방식은 응답 없이 멈춰버린다. 그래서 HTTP API 기반인
+// Resend(https://resend.com)를 쓴다. 무료 가입만 하면 도메인 인증 없이 onboarding@resend.dev
+// 발신 주소로 바로 보낼 수 있다.
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || 'gokckim@gmail.com';
 
 // 고객 문의/불만 접수: 로그인한 사용자만 보낼 수 있고, 사장님 이메일로 바로 전달된다.
 router.post('/', requireAuth, async (req, res) => {
   const { subject, message } = req.body || {};
   if (!message || !message.trim()) return res.status(400).json({ error: '문의 내용을 입력해주세요.' });
-  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-    return res.status(500).json({ error: '서버에 GMAIL_USER / GMAIL_APP_PASSWORD 가 설정되지 않았습니다.' });
+  if (!RESEND_API_KEY) {
+    return res.status(500).json({ error: '서버에 RESEND_API_KEY 가 설정되지 않았습니다.' });
   }
 
   const { data: profile } = await supabaseAdmin
@@ -34,14 +30,26 @@ router.post('/', requireAuth, async (req, res) => {
   const finalSubject = subject?.trim() || `[Birdie Bill 문의] ${senderName}`;
 
   try {
-    const transporter = getTransporter();
-    await transporter.sendMail({
-      from: `"Birdie Bill 문의" <${GMAIL_USER}>`,
-      to: GMAIL_USER,
-      replyTo: senderEmail || undefined,
-      subject: finalSubject,
-      text: `보낸 업체: ${senderName}\n보낸 계정 이메일: ${req.user.email}\n연락처 이메일: ${senderEmail}\n\n${message}`,
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Birdie Bill 문의 <onboarding@resend.dev>',
+        to: [CONTACT_TO_EMAIL],
+        reply_to: senderEmail || undefined,
+        subject: finalSubject,
+        text: `보낸 업체: ${senderName}\n보낸 계정 이메일: ${req.user.email}\n연락처 이메일: ${senderEmail}\n\n${message}`,
+      }),
     });
+
+    if (!resendRes.ok) {
+      const errBody = await resendRes.json().catch(() => ({}));
+      throw new Error(errBody.message || `Resend API 오류 (${resendRes.status})`);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
