@@ -27,15 +27,15 @@ export default function Navbar() {
             key={l.to}
             to={l.to}
             className={({ isActive }) =>
-              `px-3 py-1.5 rounded-md text-sm ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-800'}`
+              `px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-800'}`
             }
           >
             {l.label}
           </NavLink>
         ))}
-        <div className="ml-auto flex items-center gap-3 text-sm text-slate-300">
-          <span className="text-xs">{user?.email}</span>
-          <button onClick={signOut} className="px-3 py-1.5 rounded-md hover:bg-slate-800">로그아웃</button>
+        <div className="ml-auto flex items-center gap-3 text-sm text-slate-300 shrink-0">
+          <span className="text-xs whitespace-nowrap">{user?.email}</span>
+          <button onClick={signOut} className="px-3 py-1.5 rounded-md hover:bg-slate-800 whitespace-nowrap">로그아웃</button>
         </div>
       </div>
     </nav>
