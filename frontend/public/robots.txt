@@ -29,3 +29,6 @@ User-agent: Daumoa
 Allow: /
 
 Sitemap: https://birdiebill.co.kr/sitemap.xml
+
+# Daum 웹마스터도구 사이트 소유권 확인용 (수정/삭제하지 말 것)
+#DaumWebMasterTool:c8e6381734d0821944b1066929cfafc764afba3256bdec79579237d4eb65c808:TblBqbw2TYS+LoyxDXfDYQ==
