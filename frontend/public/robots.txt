@@ -1,0 +1,31 @@
+# Birdie Bill(버디빌)
+# 로그인 후 화면(앱 내부)은 어차피 인증이 필요해 검색엔진이 접근할 수 없으므로 막지 않는다.
+# AI 검색/답변 엔진 크롤러도 명시적으로 허용한다.
+User-agent: *
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Yeti
+Allow: /
+
+User-agent: Daumoa
+Allow: /
+
+Sitemap: https://birdiebill.co.kr/sitemap.xml

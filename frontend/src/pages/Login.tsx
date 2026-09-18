@@ -38,9 +38,30 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <form onSubmit={submit} className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-slate-800 mb-1">🐦 Birdie Bill</h1>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10">
+      <div className="w-full max-w-4xl grid md:grid-cols-2 gap-8 items-center">
+        <div className="order-2 md:order-1">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">🐦 Birdie Bill (버디빌)</h1>
+          <p className="text-slate-600 mb-4">
+            도소매업체를 위한 <b>견적서 · 주문서 · 거래명세서 · 전자세금계산서</b> 발행 웹 프로그램입니다.
+            견적서를 주문서로, 주문서를 거래명세서로, 거래명세서를 세금계산서로 순서대로 변환할 수 있습니다.
+          </p>
+          <ul className="text-sm text-slate-500 space-y-1 mb-6 list-disc list-inside">
+            <li>견적서 · 주문서 · 거래명세서 작성은 <b>무료</b></li>
+            <li>전자세금계산서는 팝빌 연동으로 국세청에 <b>즉시 발행</b></li>
+            <li>거래처 · 품목 관리, 카드/가상계좌로 포인트 충전</li>
+          </ul>
+          <details className="text-sm text-slate-500">
+            <summary className="cursor-pointer font-medium text-slate-600">자주 묻는 질문</summary>
+            <div className="mt-2 space-y-2">
+              <p><b>Q. 견적서, 주문서, 거래명세서 작성도 유료인가요?</b><br />A. 아니요, 문서 작성과 변환은 모두 무료입니다. 세금계산서를 실제로 발행할 때만 건당 소액 포인트가 차감됩니다.</p>
+              <p><b>Q. 세금계산서는 어떻게 발행되나요?</b><br />A. 거래명세서를 세금계산서로 변환 후 발행 버튼을 누르면 팝빌을 통해 국세청에 실시간 전자발행되고, 거래처에 이메일이 자동 발송됩니다.</p>
+            </div>
+          </details>
+        </div>
+
+      <form onSubmit={submit} className="order-1 md:order-2 bg-white p-8 rounded-2xl shadow-sm border border-slate-200 w-full max-w-sm mx-auto">
+        <h2 className="text-xl font-bold text-slate-800 mb-1">로그인</h2>
         <p className="text-sm text-slate-500 mb-6">견적 · 주문 · 거래명세서 · 세금계산서</p>
 
         <label className="text-xs text-slate-500 flex flex-col gap-1 mb-3">
@@ -84,6 +105,7 @@ export default function Login() {
           {googleBusy ? '이동 중...' : '구글 계정으로 계속하기'}
         </button>
       </form>
+      </div>
     </div>
   );
 }
