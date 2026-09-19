@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fetchProfile, saveProfile, type CompanyProfile as CompanyProfileType } from '../lib/profile';
+import { deleteAccount } from '../lib/backendApi';
 import PartyForm from '../components/PartyForm';
 import { emptyParty } from '../types';
 
 export default function CompanyProfile() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const notify = useToast();
   const [profile, setProfile] = useState<CompanyProfileType>({ ...emptyParty(), bank_name: '', bank_account: '', bank_holder: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -27,6 +29,20 @@ export default function CompanyProfile() {
       notify(e.message, 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const withdraw = async () => {
+    if (!confirm('정말 탈퇴하시겠습니까? 탈퇴하면 견적서·주문서·거래명세서·세금계산서 등 모든 데이터가 삭제되며 되돌릴 수 없습니다.')) return;
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      notify('탈퇴가 완료되었습니다. 그동안 이용해주셔서 감사합니다.', 'success');
+      await signOut();
+    } catch (e: any) {
+      notify(e.message, 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -65,6 +81,18 @@ export default function CompanyProfile() {
         className="bg-slate-900 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-slate-800 disabled:opacity-60">
         {saving ? '저장 중...' : '저장'}
       </button>
+
+      <div className="bg-white rounded-xl border border-rose-200 p-4 mt-8">
+        <h3 className="font-semibold text-rose-700 mb-1">회원탈퇴</h3>
+        <p className="text-xs text-slate-500 mb-3">
+          남은 포인트가 있으면 탈퇴할 수 없습니다. 포인트 페이지에서 먼저 환불 신청을 하고 관리자 승인이 완료된 뒤 다시 시도해주세요.
+          탈퇴 시 모든 데이터가 삭제되며 복구할 수 없습니다.
+        </p>
+        <button onClick={withdraw} disabled={deleting}
+          className="border border-rose-300 text-rose-600 px-4 py-2 rounded-md text-sm hover:bg-rose-50 disabled:opacity-60">
+          {deleting ? '처리 중...' : '회원탈퇴'}
+        </button>
+      </div>
     </div>
   );
 }

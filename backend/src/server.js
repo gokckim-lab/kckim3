@@ -5,6 +5,7 @@ const taxinvoiceRouter = require('./routes/taxinvoice');
 const nicepayRouter = require('./routes/nicepay');
 const nicepayVirtualAccountRouter = require('./routes/nicepayVirtualAccount');
 const contactRouter = require('./routes/contact');
+const accountRouter = require('./routes/account');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/popbill/taxinvoice', taxinvoiceRouter);
 app.use('/api/payments/nicepay', nicepayRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/account', accountRouter);
 
 const port = process.env.PORT || 3001;
 app.listen(port, () => {

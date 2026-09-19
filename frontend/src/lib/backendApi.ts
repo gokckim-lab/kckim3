@@ -87,3 +87,12 @@ export async function sendContactMessage(subject: string, message: string) {
   });
   return handle(res);
 }
+
+export async function deleteAccount() {
+  const headers = await authHeaders();
+  const res = await fetch(`${BASE_URL}/api/account`, {
+    method: 'DELETE',
+    headers,
+  });
+  return handle(res);
+}
