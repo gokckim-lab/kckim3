@@ -265,8 +265,8 @@ export default function DocumentEditor() {
       {(type === 'delivery' || type === 'tax_invoice') && !issued && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between print:hidden">
           <div className="text-sm text-blue-900">
-            <div className="font-medium">거래처가 보낸 {type === 'delivery' ? '견적서·주문서' : '견적서·주문서·거래명세서'} PDF가 있나요?</div>
-            <div className="text-xs text-blue-700 mt-0.5">업로드하면 거래처 정보와 품목표를 자동으로 채워줍니다.</div>
+            <div className="font-medium">거래처가 보낸 {type === 'delivery' ? '견적서·주문서' : '견적서·주문서·거래명세서'} 파일이 있나요?</div>
+            <div className="text-xs text-blue-700 mt-0.5">PDF·이미지·엑셀·워드(.docx)·한글(.hwpx)을 업로드하면 거래처 정보와 품목표를 자동으로 채워줍니다.</div>
           </div>
           <OrderDocUpload label={type === 'delivery' ? '견적서/주문서' : '견적서/주문서/거래명세서'} onExtracted={handleOrderDocImport} />
         </div>

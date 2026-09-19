@@ -39,7 +39,7 @@ export default function OrderDocUpload({ label, onExtracted }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,image/*"
+        accept="application/pdf,image/*,.xlsx,.xls,.csv,.docx,.hwpx,.hwp,.doc"
         className="hidden"
         onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
       />
@@ -49,7 +49,7 @@ export default function OrderDocUpload({ label, onExtracted }: Props) {
         disabled={!!progress?.running}
         className="text-xs px-3 py-1.5 rounded-md border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 disabled:opacity-60"
       >
-        {progress?.running ? `${progress.status} (${progress.percent}%)` : `📎 ${label} PDF 불러오기`}
+        {progress?.running ? `${progress.status} (${progress.percent}%)` : `📎 ${label} 불러오기`}
       </button>
       {progress?.running && (
         <div className="w-28 h-1.5 bg-slate-200 rounded-full overflow-hidden">

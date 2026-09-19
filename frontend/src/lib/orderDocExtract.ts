@@ -1,6 +1,7 @@
 import type { DocumentItem, PartyInfo } from '../types';
 import { extractPdfLines, extractPdfText, ocrImage, ocrPdfFirstPage, linesToText, flattenLineChars, type TextLine } from './pdfUtils';
 import { parseBusinessCardText } from './bizCardExtract';
+import { detectOfficeKind, extractOfficeLines, unsupportedOfficeMessage } from './officeDocUtils';
 
 export interface ExtractProgress {
   running: boolean;
@@ -180,6 +181,16 @@ function parsePartyWithFallbackName(text: string, markers: string[]): Partial<Pa
 
 async function getText(file: File, onProgress?: (p: ExtractProgress) => void): Promise<{ text: string; lines: TextLine[] }> {
   const report = (p: ExtractProgress) => onProgress?.(p);
+
+  const unsupported = unsupportedOfficeMessage(file);
+  if (unsupported) throw new Error(unsupported);
+  const officeKind = detectOfficeKind(file);
+  if (officeKind) {
+    report({ running: true, percent: 30, status: '파일 분석 중...' });
+    const lines = await extractOfficeLines(file, officeKind);
+    return { text: linesToText(lines), lines };
+  }
+
   if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
     report({ running: true, percent: 10, status: '파일 분석 중...' });
     const lines = await extractPdfLines(file);
