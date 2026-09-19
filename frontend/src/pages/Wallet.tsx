@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
-import { fetchMyWallet, fetchMyTransactions, requestDeposit } from '../lib/wallet';
+import { fetchMyWallet, fetchMyTransactions, requestDeposit, requestRefund } from '../lib/wallet';
 import { issueVirtualAccount, type VirtualAccountResult } from '../lib/backendApi';
 import NicePayChargeButton from '../components/NicePayChargeButton';
 import type { Wallet as WalletType, WalletTransaction } from '../types/wallet';
 
 const PRESET_AMOUNTS = [10000, 30000, 50000, 100000];
 
-const TYPE_LABEL: Record<string, string> = { deposit_request: '충전 신청', issue_deduct: '세금계산서 발행 차감', refund: '환불' };
+const TYPE_LABEL: Record<string, string> = { deposit_request: '충전 신청', issue_deduct: '세금계산서 발행 차감', refund: '환불', refund_request: '환불 신청' };
 const STATUS_LABEL: Record<string, string> = { pending: '승인 대기', approved: '완료', rejected: '반려' };
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -29,6 +29,9 @@ export default function Wallet() {
   const [vaAmount, setVaAmount] = useState(50000);
   const [vaIssuing, setVaIssuing] = useState(false);
   const [vaResult, setVaResult] = useState<VirtualAccountResult | null>(null);
+  const [refundAmount, setRefundAmount] = useState(0);
+  const [refundAccountInfo, setRefundAccountInfo] = useState('');
+  const [refunding, setRefunding] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -88,6 +91,23 @@ export default function Wallet() {
       notify(e.message, 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const submitRefund = async () => {
+    if (refundAmount <= 0) return notify('환불 금액을 입력해주세요.', 'warning');
+    if (!refundAccountInfo.trim()) return notify('환불받을 계좌 정보를 입력해주세요.', 'warning');
+    setRefunding(true);
+    try {
+      await requestRefund(refundAmount, refundAccountInfo);
+      notify('환불 신청이 접수되었습니다. 확인 후 계좌로 입금해드리며, 그때 잔액에서 차감됩니다.', 'success');
+      setRefundAmount(0);
+      setRefundAccountInfo('');
+      load();
+    } catch (e: any) {
+      notify(e.message, 'error');
+    } finally {
+      setRefunding(false);
     }
   };
 
@@ -168,6 +188,30 @@ export default function Wallet() {
         <button onClick={submit} disabled={submitting}
           className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm hover:bg-slate-800 disabled:opacity-60">
           {submitting ? '신청 중...' : '충전 신청'}
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800 mb-1">포인트 환불 신청</h3>
+        <p className="text-xs text-slate-400 mb-3">
+          신청 후 확인되면 입력하신 계좌로 입금해드리며, 그 시점에 잔액에서 차감됩니다. 잔액을 임의로 없애지 않습니다.
+        </p>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            환불 금액
+            <input type="number" step={10000} className="border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+              value={refundAmount === 0 ? '' : refundAmount}
+              onChange={(e) => setRefundAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
+          </label>
+          <label className="text-xs text-slate-500 flex flex-col gap-1">
+            환불받을 계좌
+            <input className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={refundAccountInfo}
+              onChange={(e) => setRefundAccountInfo(e.target.value)} placeholder="은행명 계좌번호 예금주" />
+          </label>
+        </div>
+        <button onClick={submitRefund} disabled={refunding}
+          className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm hover:bg-slate-800 disabled:opacity-60">
+          {refunding ? '신청 중...' : '환불 신청'}
         </button>
       </div>
 

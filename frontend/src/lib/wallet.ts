@@ -27,6 +27,15 @@ export async function requestDeposit(amount: number, depositorName: string): Pro
   return data as WalletTransaction;
 }
 
+export async function requestRefund(amount: number, accountInfo: string): Promise<WalletTransaction> {
+  const { data, error } = await supabase.rpc('request_wallet_refund', {
+    p_amount: amount,
+    p_account_info: accountInfo,
+  });
+  if (error) throw error;
+  return data as WalletTransaction;
+}
+
 export async function confirmTossPayment(paymentKey: string, orderId: string, amount: number): Promise<{ balance: number | null }> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
@@ -62,5 +71,26 @@ export async function approveDeposit(transactionId: string): Promise<void> {
 
 export async function rejectDeposit(transactionId: string, reason: string): Promise<void> {
   const { error } = await supabase.rpc('reject_wallet_deposit', { p_transaction_id: transactionId, p_reason: reason });
+  if (error) throw error;
+}
+
+export async function fetchPendingRefunds(): Promise<WalletTransaction[]> {
+  const { data, error } = await supabase
+    .from('wallet_transactions')
+    .select('*')
+    .eq('type', 'refund_request')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as WalletTransaction[];
+}
+
+export async function approveRefund(transactionId: string): Promise<void> {
+  const { error } = await supabase.rpc('approve_wallet_refund', { p_transaction_id: transactionId });
+  if (error) throw error;
+}
+
+export async function rejectRefund(transactionId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('reject_wallet_refund', { p_transaction_id: transactionId, p_reason: reason });
   if (error) throw error;
 }

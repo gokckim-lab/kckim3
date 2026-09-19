@@ -475,4 +475,107 @@ begin
 end;
 $$;
 
+-- ----------------------------------------------------------------------
+-- 포인트 환불 신청: 충전한 잔액을 실제 계좌로 돌려받고 싶을 때 사용.
+-- 무통장입금 승인 흐름과 대칭으로, 가입자가 신청 -> 관리자가 실제 계좌이체
+-- 해준 뒤 승인하면 그제서야 잔액이 차감된다(임의로 소멸시키지 않는다).
+-- ----------------------------------------------------------------------
+alter table public.wallet_transactions
+  drop constraint if exists wallet_transactions_type_check;
+alter table public.wallet_transactions
+  add constraint wallet_transactions_type_check
+  check (type in ('deposit_request', 'issue_deduct', 'refund', 'refund_request'));
+
+alter table public.wallet_transactions
+  add column if not exists refund_account_info text default '';
+
+drop policy if exists "wallet_tx: owner insert refund request" on public.wallet_transactions;
+create policy "wallet_tx: owner insert refund request" on public.wallet_transactions
+  for insert with check (
+    auth.uid() = owner_id and type = 'refund_request' and status = 'pending'
+  );
+
+-- 환불 신청 (프론트에서 authenticated 사용자가 직접 호출)
+create or replace function public.request_wallet_refund(p_amount numeric, p_account_info text)
+returns public.wallet_transactions
+language plpgsql security invoker as $$
+declare
+  v_row public.wallet_transactions;
+  v_balance numeric;
+begin
+  if p_amount <= 0 then
+    raise exception '환불 금액은 0보다 커야 합니다.';
+  end if;
+  select balance into v_balance from public.wallets where owner_id = auth.uid();
+  if v_balance is null or p_amount > v_balance then
+    raise exception '잔액보다 큰 금액은 환불 신청할 수 없습니다.';
+  end if;
+
+  insert into public.wallet_transactions (owner_id, type, amount, status, refund_account_info)
+  values (auth.uid(), 'refund_request', p_amount, 'pending', coalesce(p_account_info, ''))
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+-- 관리자 승인: 실제로 계좌이체 해준 뒤 눌러야 한다. 그 순간 잔액이 차감된다.
+create or replace function public.approve_wallet_refund(p_transaction_id uuid)
+returns public.wallet_transactions
+language plpgsql security definer set search_path = public as $$
+declare
+  v_tx public.wallet_transactions;
+  v_balance numeric;
+begin
+  if not exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.is_admin) then
+    raise exception '관리자만 승인할 수 있습니다.';
+  end if;
+
+  select * into v_tx from public.wallet_transactions where id = p_transaction_id for update;
+  if v_tx is null then
+    raise exception '해당 환불 신청을 찾을 수 없습니다.';
+  end if;
+  if v_tx.status <> 'pending' or v_tx.type <> 'refund_request' then
+    raise exception '이미 처리된 신청입니다.';
+  end if;
+
+  select balance into v_balance from public.wallets where owner_id = v_tx.owner_id for update;
+  if v_balance is null or v_balance < v_tx.amount then
+    raise exception '잔액이 부족하여 승인할 수 없습니다.';
+  end if;
+
+  update public.wallets set balance = balance - v_tx.amount, updated_at = now()
+  where owner_id = v_tx.owner_id;
+
+  update public.wallet_transactions
+  set status = 'approved', approved_by = auth.uid(), approved_at = now()
+  where id = p_transaction_id
+  returning * into v_tx;
+
+  return v_tx;
+end;
+$$;
+
+-- 관리자 반려
+create or replace function public.reject_wallet_refund(p_transaction_id uuid, p_reason text)
+returns public.wallet_transactions
+language plpgsql security definer set search_path = public as $$
+declare
+  v_tx public.wallet_transactions;
+begin
+  if not exists (select 1 from public.profiles where profiles.id = auth.uid() and profiles.is_admin) then
+    raise exception '관리자만 반려할 수 있습니다.';
+  end if;
+
+  update public.wallet_transactions
+  set status = 'rejected', approved_by = auth.uid(), approved_at = now(), memo = coalesce(p_reason, '')
+  where id = p_transaction_id and status = 'pending' and type = 'refund_request'
+  returning * into v_tx;
+
+  if v_tx is null then
+    raise exception '해당 환불 신청을 찾을 수 없거나 이미 처리되었습니다.';
+  end if;
+  return v_tx;
+end;
+$$;
+
 grant execute on function public.admin_list_subscribers() to authenticated;

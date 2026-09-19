@@ -16,7 +16,12 @@ const LINKS = [
 export default function Navbar() {
   const { signOut, user, isAdmin } = useAuth();
   const links = isAdmin
-    ? [...LINKS, { to: '/admin/deposits', label: '입금승인(관리자)' }, { to: '/admin/users', label: '전체 가입자(관리자)' }]
+    ? [
+        ...LINKS,
+        { to: '/admin/deposits', label: '입금승인(관리자)' },
+        { to: '/admin/refunds', label: '환불승인(관리자)' },
+        { to: '/admin/users', label: '전체 가입자(관리자)' },
+      ]
     : LINKS;
 
   return (

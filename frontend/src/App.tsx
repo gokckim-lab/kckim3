@@ -12,6 +12,7 @@ import DocumentEditor from './pages/DocumentEditor';
 import Wallet from './pages/Wallet';
 import AdminDeposits from './pages/AdminDeposits';
 import AdminUsers from './pages/AdminUsers';
+import AdminRefunds from './pages/AdminRefunds';
 import Contact from './pages/Contact';
 
 function Shell() {
@@ -28,6 +29,7 @@ function Shell() {
         <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
         <Route path="/contact" element={<ProtectedRoute><Contact /></ProtectedRoute>} />
         <Route path="/admin/deposits" element={<ProtectedRoute><AdminDeposits /></ProtectedRoute>} />
+        <Route path="/admin/refunds" element={<ProtectedRoute><AdminRefunds /></ProtectedRoute>} />
         <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
         <Route path="/documents/:type" element={<ProtectedRoute><DocumentList /></ProtectedRoute>} />
         <Route path="/documents/:type/:id" element={<ProtectedRoute><DocumentEditor /></ProtectedRoute>} />

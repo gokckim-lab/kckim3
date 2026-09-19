@@ -1,4 +1,4 @@
-export type WalletTxType = 'deposit_request' | 'issue_deduct' | 'refund';
+export type WalletTxType = 'deposit_request' | 'issue_deduct' | 'refund' | 'refund_request';
 export type WalletTxStatus = 'pending' | 'approved' | 'rejected';
 
 export interface WalletTransaction {
@@ -8,6 +8,7 @@ export interface WalletTransaction {
   amount: number;
   status: WalletTxStatus;
   depositor_name: string;
+  refund_account_info: string;
   memo: string;
   related_document_id: string | null;
   approved_by: string | null;
