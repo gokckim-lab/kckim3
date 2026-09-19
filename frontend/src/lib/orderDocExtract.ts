@@ -1,5 +1,5 @@
 import type { DocumentItem, PartyInfo } from '../types';
-import { extractPdfLines, extractPdfText, ocrImage, ocrPdfFirstPage, linesToText, type TextLine } from './pdfUtils';
+import { extractPdfLines, extractPdfText, ocrImage, ocrPdfFirstPage, linesToText, flattenLineChars, type TextLine } from './pdfUtils';
 import { parseBusinessCardText } from './bizCardExtract';
 
 export interface ExtractProgress {
@@ -18,14 +18,18 @@ export interface OrderDocResult {
 // 회사마다 열 이름이 제각각이라, 흔히 쓰이는 표현을 폭넓게 인식한다.
 // 글자 사이가 띄어져 있을 수 있어 각 글자 사이에 \s*를 둔다.
 const s = (word: string) => word.split('').join('\\s*');
+// 줄 전체를 이어붙인 문자열(flattenLineChars 결과) 안에서 부분 문자열로 찾으므로
+// 앞뒤를 ^...$로 고정하지 않는다. 일부 견적서 양식은 "품 목 명"처럼 헤더 글자를
+// 한 글자씩 따로 찍어두는데, part 단위로 온전한 단어 매칭을 하면 이런 문서에서
+// 표 헤더를 전혀 인식하지 못해 품목 전체가 빠지는 문제가 있었다.
 const COLUMN_PATTERNS: { key: keyof RowCells; re: RegExp }[] = [
-  { key: 'name', re: new RegExp(`^(?:${s('품목')}|${s('품명')}|${s('제품명')}|${s('상품명')}|${s('내역')}|${s('명칭')}|item|product)$`, 'i') },
-  { key: 'spec', re: new RegExp(`^(?:${s('규격')}|${s('사양')}|${s('규격사양')}|spec)$`, 'i') },
-  { key: 'qty', re: new RegExp(`^(?:${s('수량')}|${s('개수')}|qty)$`, 'i') },
-  { key: 'unitPrice', re: new RegExp(`^(?:${s('단가')}|${s('가격')}|price)$`, 'i') },
-  { key: 'supplyPrice', re: new RegExp(`^(?:${s('공급가액')}|${s('공급가')}|${s('금액')}|${s('합계금액')}|amount)$`, 'i') },
-  { key: 'tax', re: new RegExp(`^(?:${s('세액')}|${s('부가세')}|vat)$`, 'i') },
-  { key: 'remark', re: new RegExp(`^(?:${s('비고')}|note|remark)$`, 'i') },
+  { key: 'name', re: new RegExp(`(?:${s('품목')}|${s('품명')}|${s('제품명')}|${s('상품명')}|${s('내역')}|${s('명칭')}|item|product)`, 'i') },
+  { key: 'spec', re: new RegExp(`(?:${s('규격')}|${s('사양')}|${s('규격사양')}|spec)`, 'i') },
+  { key: 'qty', re: new RegExp(`(?:${s('수량')}|${s('개수')}|qty)`, 'i') },
+  { key: 'unitPrice', re: new RegExp(`(?:${s('단가')}|${s('가격')}|price)`, 'i') },
+  { key: 'supplyPrice', re: new RegExp(`(?:${s('공급가액')}|${s('공급가')}|${s('금액')}|${s('합계금액')}|amount)`, 'i') },
+  { key: 'tax', re: new RegExp(`(?:${s('세액')}|${s('부가세')}|vat)`, 'i') },
+  { key: 'remark', re: new RegExp(`(?:${s('비고')}|note|remark)`, 'i') },
 ];
 
 interface RowCells {
@@ -38,16 +42,22 @@ interface RowCells {
   remark: string;
 }
 
-const STOP_ROW = /^(합\s*계|소\s*계|총\s*계|총\s*액|총\s*합\s*계|total|이\s*하\s*여\s*백)/i;
+// "합계"뿐 아니라 총합 줄을 그냥 "계"로만 표기하는 양식도 있고, 표 아래에는 보통
+// "입금계좌번호:", "비고:" 같은 안내 문구가 이어진다. 이런 줄까지 품목으로 잘못
+// 집계되지 않도록 표가 끝나는 신호로 함께 인식한다.
+const STOP_ROW = /^(합\s*계|소\s*계|총\s*계|총\s*액|총\s*합\s*계|계|total|이\s*하\s*여\s*백|입\s*금\s*계\s*좌|비\s*고\s*[:：]?$)/i;
 
 function findHeader(lines: TextLine[]): { index: number; columns: { key: keyof RowCells; x: number }[] } | null {
   for (let i = 0; i < lines.length; i++) {
+    const chars = flattenLineChars(lines[i]);
+    if (chars.length === 0) continue;
+    const flat = chars.map((c) => c.ch).join('');
     const columns: { key: keyof RowCells; x: number }[] = [];
-    for (const part of lines[i].parts) {
-      const text = part.str.trim();
-      if (!text) continue;
-      const match = COLUMN_PATTERNS.find((c) => c.re.test(text));
-      if (match && !columns.some((c) => c.key === match.key)) columns.push({ key: match.key, x: part.x });
+    for (const patt of COLUMN_PATTERNS) {
+      const match = flat.match(patt.re);
+      if (match && match.index != null && !columns.some((c) => c.key === patt.key)) {
+        columns.push({ key: patt.key, x: chars[match.index].x });
+      }
     }
     // 품목/품명 칸 + 나머지 중 최소 1개(수량/단가/금액) 이상 잡히면 표의 헤더 줄로 본다.
     const hasName = columns.some((c) => c.key === 'name');
@@ -86,7 +96,12 @@ function parseRows(lines: TextLine[], headerIndex: number, columns: { key: keyof
       const key = assignToColumn(part.x, columns);
       cells[key] = (cells[key] ? cells[key] + ' ' : '') + part.str;
     }
-    for (const key of Object.keys(cells) as (keyof RowCells)[]) cells[key] = cells[key].trim();
+    // 양식에 미리 인쇄된 빈 줄은 값 대신 "-"만 찍혀 있는 경우가 많다. 이런 자리표시자는
+    // 빈 값과 동일하게 취급해야, 아래에서 수량 기본값(1)이 붙어 빈 줄이 가짜 품목으로 남지 않는다.
+    for (const key of Object.keys(cells) as (keyof RowCells)[]) {
+      const trimmed = cells[key].trim();
+      cells[key] = /^-+$/.test(trimmed) ? '' : trimmed;
+    }
 
     if (!cells.name && !cells.qty && !cells.unitPrice && !cells.supplyPrice) continue;
 

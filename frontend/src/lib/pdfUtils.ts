@@ -66,6 +66,22 @@ export function lineToText(line: TextLine): string {
   return line.parts.map((p) => p.str).join(' ').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 일부 PDF 템플릿(견적서 양식 등)은 표 헤더 글자를 "품 목 명"처럼 한 글자씩
+ * 따로따로 배치해서 만든다. 이 경우 각 part.str가 한 글자뿐이라 "품목" 같은
+ * 온전한 단어 매칭이 안 되므로, 줄 전체를 글자 단위로 펼쳐서(공백 제외) 검색할 수
+ * 있게 해준다. 각 글자는 자신이 속했던 part의 x좌표를 그대로 물려받는다.
+ */
+export function flattenLineChars(line: TextLine): { ch: string; x: number }[] {
+  const chars: { ch: string; x: number }[] = [];
+  for (const part of line.parts) {
+    for (const ch of part.str) {
+      if (ch.trim()) chars.push({ ch, x: part.x });
+    }
+  }
+  return chars;
+}
+
 export function linesToText(lines: TextLine[]): string {
   return lines.map(lineToText).filter(Boolean).join('\n');
 }
