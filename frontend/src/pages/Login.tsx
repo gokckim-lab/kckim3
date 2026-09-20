@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const [params] = useSearchParams();
+  const next = params.get('next');
+  // 열린 리다이렉트를 막기 위해 같은 사이트 안의 경로만 허용한다.
+  const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,7 +16,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to={safeNext} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -78,6 +82,11 @@ export default function Login() {
             className="border border-slate-300 rounded-md px-3 py-2 text-sm" />
         </label>
 
+        {next && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3">
+            세금계산서 발행은 가입 후 이용할 수 있습니다. 작성 중인 문서는 로그인하면 내 계정으로 자동 이전됩니다.
+          </div>
+        )}
         {error && <div className="text-sm text-rose-600 mb-3">{error}</div>}
         {info && <div className="text-sm text-emerald-600 mb-3">{info}</div>}
 
@@ -107,6 +116,10 @@ export default function Login() {
           </svg>
           {googleBusy ? '이동 중...' : '구글 계정으로 계속하기'}
         </button>
+
+        <Link to="/documents/quote" className="block text-center text-xs text-slate-500 mt-4 hover:underline">
+          가입 없이 견적서·주문서·거래명세서 먼저 써보기 →
+        </Link>
       </form>
       </div>
     </div>

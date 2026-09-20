@@ -6,14 +6,24 @@ import PartyForm from '../components/PartyForm';
 import ItemTable from '../components/ItemTable';
 import PrintableDocument from '../components/PrintableDocument';
 import OrderDocUpload from '../components/OrderDocUpload';
+import GuestBanner from '../components/GuestBanner';
 import { fetchCustomers } from '../lib/customers';
 import { fetchProfile } from '../lib/profile';
-import { createDocument, fetchDocument, updateDocument, NEXT_TYPE } from '../lib/documents';
+import { NEXT_TYPE } from '../lib/documents';
+import { getDocStore } from '../lib/docStore';
+import { loadGuestSupplier, saveGuestSupplier } from '../lib/guestStore';
 import { issueTaxInvoice, getTaxInvoicePopupUrl, resendTaxInvoiceEmail } from '../lib/backendApi';
 import { fetchMyWallet } from '../lib/wallet';
 import type { OrderDocResult } from '../lib/orderDocExtract';
 import type { CustomerRecord, DocType, DocumentItem, DocumentRecord, PartyInfo } from '../types';
 import { DOC_TYPE_LABEL, emptyParty } from '../types';
+
+// toISOString()은 UTC 기준이라 한국 시간 새벽(0~9시)에는 작성일이 하루 전으로 찍힌다.
+const todayLocal = () => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 
 export default function DocumentEditor() {
   const { type, id } = useParams<{ type: DocType; id: string }>();
@@ -22,6 +32,7 @@ export default function DocumentEditor() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const notify = useToast();
+  const store = getDocStore(user?.id ?? null);
 
   const isNew = !id || id === 'new';
 
@@ -30,7 +41,7 @@ export default function DocumentEditor() {
   const [customer, setCustomer] = useState<PartyInfo>(emptyParty());
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [items, setItems] = useState<DocumentItem[]>([]);
-  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [issueDate, setIssueDate] = useState(() => todayLocal());
   const [dueDate, setDueDate] = useState('');
   const [memo, setMemo] = useState('');
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
@@ -41,11 +52,12 @@ export default function DocumentEditor() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     fetchCustomers().then(setCustomers).catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!type || !user) return;
+    if (!type) return;
     setLoading(true);
     (async () => {
       try {
@@ -56,11 +68,11 @@ export default function DocumentEditor() {
         setCustomerId(null);
         setItems([]);
         setMemo('');
-        setIssueDate(new Date().toISOString().slice(0, 10));
+        setIssueDate(todayLocal());
         setDueDate('');
 
         if (!isNew && id) {
-          const d = await fetchDocument(id);
+          const d = await store.get(id);
           setDoc(d);
           setSupplier(d.supplier);
           setCustomer(d.customer);
@@ -70,7 +82,7 @@ export default function DocumentEditor() {
           setDueDate(d.due_date ?? '');
           setMemo(d.memo);
         } else if (sourceId) {
-          const src = await fetchDocument(sourceId);
+          const src = await store.get(sourceId);
           setSupplier(src.supplier);
           setCustomer(src.customer);
           setCustomerId(src.customer_id);
@@ -81,8 +93,7 @@ export default function DocumentEditor() {
           setItems((src.document_items ?? []).map(({ id: _id, document_id: _documentId, ...rest }, idx) => ({ ...rest, sort_order: idx })));
           setMemo(src.memo);
         } else {
-          const profile = await fetchProfile(user.id);
-          setSupplier(profile);
+          setSupplier(user ? await fetchProfile(user.id) : loadGuestSupplier());
           setCustomer(emptyParty());
         }
       } catch (e: any) {
@@ -91,13 +102,13 @@ export default function DocumentEditor() {
         setLoading(false);
       }
     })();
-  }, [type, id, sourceId, user]);
+  }, [type, id, sourceId, user?.id]);
 
   useEffect(() => {
-    if (type === 'tax_invoice') {
+    if (type === 'tax_invoice' && user) {
       fetchMyWallet().then((w) => setWalletBalance(w.balance)).catch(() => setWalletBalance(null));
     }
-  }, [type]);
+  }, [type, user?.id]);
 
   const pickCustomer = (cid: string) => {
     setCustomerId(cid || null);
@@ -131,10 +142,10 @@ export default function DocumentEditor() {
     }
   };
 
-  const save = async () => {
-    if (!user || !type) return;
-    if (!customer.name.trim()) return notify('공급받는자(거래처) 상호를 입력해주세요.', 'warning');
-    if (items.length === 0) return notify('품목을 1개 이상 추가해주세요.', 'warning');
+  const save = async (): Promise<boolean> => {
+    if (!type) return false;
+    if (!customer.name.trim()) { notify('공급받는자(거래처) 상호를 입력해주세요.', 'warning'); return false; }
+    if (items.length === 0) { notify('품목을 1개 이상 추가해주세요.', 'warning'); return false; }
     setSaving(true);
     try {
       const draft = {
@@ -142,20 +153,31 @@ export default function DocumentEditor() {
         due_date: dueDate || null, memo, items, source_document_id: doc?.source_document_id ?? sourceId ?? null,
       };
       if (doc) {
-        await updateDocument(doc.id, draft);
+        await store.update(doc.id, draft);
+        if (!user) saveGuestSupplier(supplier);
         notify('저장되었습니다.', 'success');
-        const refreshed = await fetchDocument(doc.id);
+        const refreshed = await store.get(doc.id);
         setDoc(refreshed);
       } else {
-        const created = await createDocument(user.id, user.id, draft);
+        const created = await store.create(draft);
+        if (!user) saveGuestSupplier(supplier);
         notify('문서를 생성했습니다.', 'success');
         navigate(`/documents/${type}/${created.id}`, { replace: true });
       }
+      return true;
     } catch (e: any) {
       notify(e.message, 'error');
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  // 체험 모드에서는 세금계산서를 발행할 수 없다. 작성 중인 내용을 먼저 브라우저에 저장해두면
+  // 가입/로그인 직후 계정으로 자동 이전되므로, 저장에 성공했을 때만 로그인 화면으로 보낸다.
+  const goSignupToIssue = async () => {
+    if (customer.name.trim() && items.length > 0 && !(await save())) return;
+    navigate('/login?next=/documents/tax_invoice');
   };
 
   const doIssue = async () => {
@@ -169,7 +191,7 @@ export default function DocumentEditor() {
       } else {
         notify(`이메일 자동발송에 실패했습니다: ${result.emailError ?? '알 수 없는 오류'}. 아래 "이메일 재발송" 버튼으로 다시 시도할 수 있습니다.`, 'warning');
       }
-      const refreshed = await fetchDocument(doc.id);
+      const refreshed = await store.get(doc.id);
       setDoc(refreshed);
       fetchMyWallet().then((w) => setWalletBalance(w.balance)).catch(() => {});
     } catch (e: any) {
@@ -221,6 +243,7 @@ export default function DocumentEditor() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
+      <GuestBanner />
       <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-xl font-bold text-slate-800">{label} {doc ? `- ${doc.doc_no}` : '작성'}</h1>
@@ -245,6 +268,12 @@ export default function DocumentEditor() {
               {issuing ? '발행 중...' : insufficientBalance ? '포인트 부족' : '팝빌로 세금계산서 발행'}
             </button>
           )}
+          {isTaxInvoice && !user && (
+            <button onClick={goSignupToIssue}
+              className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700">
+              세금계산서 발행 (가입 필요)
+            </button>
+          )}
           {isTaxInvoice && issued && (
             <button onClick={viewIssued} className="px-4 py-2 text-sm bg-emerald-100 text-emerald-700 rounded-md">발행된 문서 보기</button>
           )}
@@ -255,7 +284,7 @@ export default function DocumentEditor() {
               {resendingEmail ? '발송 중...' : '이메일 재발송'}
             </button>
           )}
-          <button onClick={save} disabled={saving || (isTaxInvoice && issued)}
+          <button onClick={() => { void save(); }} disabled={saving || (isTaxInvoice && issued)}
             className="px-4 py-2 text-sm bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-60">
             {saving ? '저장 중...' : '저장'}
           </button>

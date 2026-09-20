@@ -1,11 +1,14 @@
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const LINKS = [
+const DOC_LINKS = [
   { to: '/documents/quote', label: '견적서' },
   { to: '/documents/order', label: '주문서' },
   { to: '/documents/delivery', label: '거래명세서' },
   { to: '/documents/tax_invoice', label: '세금계산서' },
+];
+
+const MEMBER_LINKS = [
   { to: '/customers', label: '거래처' },
   { to: '/products', label: '품목' },
   { to: '/wallet', label: '포인트' },
@@ -15,14 +18,17 @@ const LINKS = [
 
 export default function Navbar() {
   const { signOut, user, isAdmin } = useAuth();
-  const links = isAdmin
-    ? [
-        ...LINKS,
-        { to: '/admin/deposits', label: '입금승인(관리자)' },
-        { to: '/admin/refunds', label: '환불승인(관리자)' },
-        { to: '/admin/users', label: '전체 가입자(관리자)' },
-      ]
-    : LINKS;
+  const links = !user
+    ? DOC_LINKS
+    : isAdmin
+      ? [
+          ...DOC_LINKS,
+          ...MEMBER_LINKS,
+          { to: '/admin/deposits', label: '입금승인(관리자)' },
+          { to: '/admin/refunds', label: '환불승인(관리자)' },
+          { to: '/admin/users', label: '전체 가입자(관리자)' },
+        ]
+      : [...DOC_LINKS, ...MEMBER_LINKS];
 
   return (
     <nav className="bg-slate-900 text-white print:hidden">
@@ -40,8 +46,16 @@ export default function Navbar() {
           </NavLink>
         ))}
         <div className="ml-auto flex items-center gap-3 text-sm text-slate-300 shrink-0">
-          <span className="text-xs whitespace-nowrap">{user?.email}</span>
-          <button onClick={signOut} className="px-3 py-1.5 rounded-md hover:bg-slate-800 whitespace-nowrap">로그아웃</button>
+          {user ? (
+            <>
+              <span className="text-xs whitespace-nowrap">{user.email}</span>
+              <button onClick={signOut} className="px-3 py-1.5 rounded-md hover:bg-slate-800 whitespace-nowrap">로그아웃</button>
+            </>
+          ) : (
+            <Link to="/login" className="px-3 py-1.5 rounded-md bg-white text-slate-900 font-medium whitespace-nowrap hover:bg-slate-100">
+              로그인 / 회원가입
+            </Link>
+          )}
         </div>
       </div>
     </nav>
