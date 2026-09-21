@@ -15,11 +15,16 @@ export default function Login() {
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   if (user) return <Navigate to={safeNext} replace />;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (mode === 'signup' && !agreed) {
+      setError('이용약관과 개인정보처리방침에 동의해주세요.');
+      return;
+    }
     setBusy(true);
     setError(null);
     setInfo(null);
@@ -82,6 +87,15 @@ export default function Login() {
             className="border border-slate-300 rounded-md px-3 py-2 text-sm" />
         </label>
 
+        {mode === 'signup' && (
+          <label className="flex items-start gap-2 text-xs text-slate-600 mb-3">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
+            <span>
+              <Link to="/terms" target="_blank" className="underline">이용약관</Link> 및{' '}
+              <Link to="/privacy" target="_blank" className="underline">개인정보처리방침</Link>에 동의합니다. (필수)
+            </span>
+          </label>
+        )}
         {next && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3">
             세금계산서 발행은 가입 후 이용할 수 있습니다. 작성 중인 문서는 로그인하면 내 계정으로 자동 이전됩니다.
@@ -116,6 +130,9 @@ export default function Login() {
           </svg>
           {googleBusy ? '이동 중...' : '구글 계정으로 계속하기'}
         </button>
+        <p className="text-[11px] text-slate-400 text-center mt-2">
+          구글로 계속하면 <Link to="/terms" target="_blank" className="underline">이용약관</Link> 및 <Link to="/privacy" target="_blank" className="underline">개인정보처리방침</Link>에 동의한 것으로 봅니다.
+        </p>
 
         <Link to="/documents/quote" className="block text-center text-xs text-slate-500 mt-4 hover:underline">
           가입 없이 견적서·주문서·거래명세서 먼저 써보기 →

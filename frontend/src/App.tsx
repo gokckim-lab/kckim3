@@ -17,6 +17,9 @@ import AdminDeposits from './pages/AdminDeposits';
 import AdminUsers from './pages/AdminUsers';
 import AdminRefunds from './pages/AdminRefunds';
 import Contact from './pages/Contact';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
+import Footer from './components/Footer';
 
 function Shell() {
   const { user, loading } = useAuth();
@@ -47,6 +50,8 @@ function Shell() {
       {pathname !== '/login' && <Navbar />}
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="/" element={<Navigate to="/documents/quote" replace />} />
         <Route path="/profile" element={<ProtectedRoute><CompanyProfile /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
@@ -59,6 +64,7 @@ function Shell() {
         <Route path="/documents/:type" element={<DocumentList />} />
         <Route path="/documents/:type/:id" element={<DocumentEditor />} />
       </Routes>
+      {pathname !== '/login' && <Footer />}
     </div>
   );
 }
