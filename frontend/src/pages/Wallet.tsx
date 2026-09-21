@@ -62,9 +62,7 @@ export default function Wallet() {
 
   const confirmInvoiceInfo = () =>
     !missingInvoiceInfo ||
-    confirm('회사정보에 사업자등록번호 또는 이메일이 없어 세금계산서를 발급받을 수 없습니다.
-(카드 충전은 카드전표가 증빙이라 해당 없음)
-그래도 계속 진행할까요?');
+    confirm('회사정보에 사업자등록번호 또는 이메일이 없어 세금계산서를 발급받을 수 없습니다. (카드 충전은 카드전표가 증빙이라 해당 없음) 그래도 계속 진행할까요?');
 
   // 나이스페이 결제 후 backend가 /wallet?nicepay=success|fail 로 돌려보낸다.
   useEffect(() => {
