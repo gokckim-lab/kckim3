@@ -52,21 +52,16 @@ router.post('/return', express.urlencoded({ extended: true }), async (req, res) 
       return fail(approveJson.resultMsg || '결제 승인에 실패했습니다.');
     }
 
-    // paymentKey(tid)를 PK로 먼저 기록해서 콜백이 중복 도착해도 적립이 한 번만 되도록 한다.
-    const { error: insertErr } = await supabaseAdmin
-      .from('nicepay_payments')
-      .insert({ tid, order_id: orderId, owner_id: ownerId, amount: Number(amount) });
-
-    if (insertErr && insertErr.code !== '23505') throw insertErr;
-
-    if (!insertErr) {
-      const { error: creditErr } = await supabaseAdmin.rpc('wallet_credit', {
-        p_owner_id: ownerId,
-        p_amount: Number(amount),
-        p_memo: `나이스페이 카드결제 (${String(tid).slice(0, 12)}...)`,
-      });
-      if (creditErr) throw creditErr;
-    }
+    // 결제 기록(tid가 PK라 중복 콜백은 무시됨)과 포인트 적립을 DB 함수 하나로 묶어 처리한다.
+    // 적립이 실패하면 결제 기록도 함께 되돌려져서, 콜백을 다시 받았을 때 정상 적립된다.
+    const { error: creditErr } = await supabaseAdmin.rpc('credit_card_payment', {
+      p_tid: tid,
+      p_order_id: orderId,
+      p_owner_id: ownerId,
+      p_amount: Number(amount),
+      p_memo: `나이스페이 카드결제 (${String(tid).slice(0, 12)}...)`,
+    });
+    if (creditErr) throw creditErr;
 
     return res.redirect(`${FRONTEND_ORIGIN}/wallet?nicepay=success&amount=${encodeURIComponent(amount)}`);
   } catch (err) {

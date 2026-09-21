@@ -155,31 +155,20 @@ router.post('/notify', express.raw({ type: '*/*' }), async (req, res) => {
       return res.status(200).send('OK');
     }
 
-    const ownerId = extractOwnerId(moid);
-    if (!ownerId) return res.status(200).send('OK');
+    if (!extractOwnerId(moid)) return res.status(200).send('OK');
 
-    const { data: va } = await supabaseAdmin
-      .from('nicepay_virtual_accounts')
-      .select('*')
-      .eq('moid', moid)
-      .single();
-
-    if (!va || va.status === 'paid') return res.status(200).send('OK'); // 이미 처리됨 (중복 통보 방어)
-    if (Number(va.amount) !== Number(amt)) {
-      console.error(`가상계좌 입금액 불일치: moid=${moid} 예상=${va.amount} 실제=${amt}`);
-      return res.status(200).send('OK');
-    }
-
-    await supabaseAdmin
-      .from('nicepay_virtual_accounts')
-      .update({ status: 'paid', paid_at: new Date().toISOString() })
-      .eq('moid', moid);
-
-    await supabaseAdmin.rpc('wallet_credit', {
-      p_owner_id: ownerId,
+    // 입금완료 표시와 포인트 적립을 DB 함수 하나로 묶어 처리한다(둘 다 되거나 둘 다 안 됨).
+    // 적립이 실패하면 에러로 응답해서 나이스페이가 재통보하도록 한다.
+    const { data: outcome, error: creditErr } = await supabaseAdmin.rpc('credit_virtual_account_deposit', {
+      p_moid: moid,
       p_amount: Number(amt),
       p_memo: `가상계좌 입금 (${depositorName || tid})`,
     });
+    if (creditErr) throw creditErr;
+    if (outcome === 'amount_mismatch') {
+      console.error(`가상계좌 입금액 불일치: moid=${moid} 실제=${amt}`);
+    }
+    // not_found / already_paid(중복 통보) / amount_mismatch 는 재시도해도 결과가 같으므로 OK로 종료한다.
 
     res.status(200).send('OK');
   } catch (err) {

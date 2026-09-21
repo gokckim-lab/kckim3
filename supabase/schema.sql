@@ -579,3 +579,56 @@ end;
 $$;
 
 grant execute on function public.admin_list_subscribers() to authenticated;
+
+-- ----------------------------------------------------------------------
+-- 보안 수정: 포인트 적립/차감/환급 함수는 backend(service_role)에서만 호출한다.
+-- Postgres 함수는 기본적으로 모든 사용자(PUBLIC)가 실행할 수 있어서, 잠그지 않으면
+-- 로그인한 누구나 supabase.rpc('wallet_credit', ...)로 자기 포인트를 마음대로 늘릴 수 있다.
+-- ----------------------------------------------------------------------
+revoke execute on function public.wallet_credit(uuid, numeric, text) from public, anon, authenticated;
+revoke execute on function public.wallet_try_deduct(uuid, numeric, uuid) from public, anon, authenticated;
+revoke execute on function public.wallet_refund(uuid, numeric, uuid) from public, anon, authenticated;
+grant execute on function public.wallet_credit(uuid, numeric, text) to service_role;
+grant execute on function public.wallet_try_deduct(uuid, numeric, uuid) to service_role;
+grant execute on function public.wallet_refund(uuid, numeric, uuid) to service_role;
+
+-- ----------------------------------------------------------------------
+-- 입금 처리 원자화: "입금완료 표시"와 "포인트 적립"을 한 트랜잭션으로 묶는다.
+-- 예전에는 상태를 먼저 paid로 바꾼 뒤 적립했기 때문에, 적립이 실패하면 나이스가 재통보해도
+-- "이미 처리됨"으로 무시되어 돈은 받고 포인트는 못 받는 상태가 될 수 있었다.
+-- ----------------------------------------------------------------------
+create or replace function public.credit_virtual_account_deposit(p_moid text, p_amount numeric, p_memo text)
+returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_va public.nicepay_virtual_accounts;
+begin
+  select * into v_va from public.nicepay_virtual_accounts where moid = p_moid for update;
+  if v_va is null then return 'not_found'; end if;
+  if v_va.status = 'paid' then return 'already_paid'; end if;
+  if v_va.amount <> p_amount then return 'amount_mismatch'; end if;
+
+  perform public.wallet_credit(v_va.owner_id, p_amount, p_memo);
+  update public.nicepay_virtual_accounts set status = 'paid', paid_at = now() where moid = p_moid;
+  return 'credited';
+end;
+$$;
+
+create or replace function public.credit_card_payment(p_tid text, p_order_id text, p_owner_id uuid, p_amount numeric, p_memo text)
+returns text
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.nicepay_payments (tid, order_id, owner_id, amount)
+  values (p_tid, p_order_id, p_owner_id, p_amount)
+  on conflict (tid) do nothing;
+  if not found then return 'already_paid'; end if;
+
+  perform public.wallet_credit(p_owner_id, p_amount, p_memo);
+  return 'credited';
+end;
+$$;
+
+revoke execute on function public.credit_virtual_account_deposit(text, numeric, text) from public, anon, authenticated;
+revoke execute on function public.credit_card_payment(text, text, uuid, numeric, text) from public, anon, authenticated;
+grant execute on function public.credit_virtual_account_deposit(text, numeric, text) to service_role;
+grant execute on function public.credit_card_payment(text, text, uuid, numeric, text) to service_role;
