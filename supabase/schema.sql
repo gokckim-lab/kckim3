@@ -632,3 +632,21 @@ revoke execute on function public.credit_virtual_account_deposit(text, numeric, 
 revoke execute on function public.credit_card_payment(text, text, uuid, numeric, text) from public, anon, authenticated;
 grant execute on function public.credit_virtual_account_deposit(text, numeric, text) to service_role;
 grant execute on function public.credit_card_payment(text, text, uuid, numeric, text) to service_role;
+
+-- ----------------------------------------------------------------------
+-- 탈퇴 회원의 거래기록 보존: 충전/결제 내역(매출 증빙 관련 자료)은 법령상 5년간 보관해야 하므로,
+-- 회원 탈퇴로 원본 행이 cascade 삭제되기 전에 backend가 이 테이블로 사본을 남긴다.
+-- RLS를 켜고 정책을 두지 않아 service_role(backend)만 읽고 쓸 수 있다.
+-- ----------------------------------------------------------------------
+create table if not exists public.account_deletion_archive (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  email text,
+  profile jsonb,
+  wallet_transactions jsonb,
+  nicepay_payments jsonb,
+  nicepay_virtual_accounts jsonb,
+  deleted_at timestamptz not null default now(),
+  retain_until date not null default ((current_date + interval '5 years')::date)
+);
+alter table public.account_deletion_archive enable row level security;

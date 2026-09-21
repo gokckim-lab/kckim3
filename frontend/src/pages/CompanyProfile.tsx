@@ -86,7 +86,7 @@ export default function CompanyProfile() {
         <h3 className="font-semibold text-rose-700 mb-1">회원탈퇴</h3>
         <p className="text-xs text-slate-500 mb-3">
           남은 포인트가 있으면 탈퇴할 수 없습니다. 포인트 페이지에서 먼저 환불 신청을 하고 관리자 승인이 완료된 뒤 다시 시도해주세요.
-          탈퇴 시 모든 데이터가 삭제되며 복구할 수 없습니다.
+          탈퇴 시 견적서·세금계산서 등 작성 데이터는 모두 삭제되며 복구할 수 없습니다. 다만 충전·결제 거래기록은 관련 법령에 따라 5년간 별도 보관됩니다.
         </p>
         <button onClick={withdraw} disabled={deleting}
           className="border border-rose-300 text-rose-600 px-4 py-2 rounded-md text-sm hover:bg-rose-50 disabled:opacity-60">

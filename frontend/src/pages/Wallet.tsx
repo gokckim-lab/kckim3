@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { fetchProfile } from '../lib/profile';
 import { fetchMyWallet, fetchMyTransactions, requestDeposit, requestRefund } from '../lib/wallet';
 import { issueVirtualAccount, type VirtualAccountResult } from '../lib/backendApi';
 import NicePayChargeButton from '../components/NicePayChargeButton';
@@ -18,6 +20,8 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function Wallet() {
   const notify = useToast();
+  const { user } = useAuth();
+  const [missingInvoiceInfo, setMissingInvoiceInfo] = useState(false);
   const [params, setParams] = useSearchParams();
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [txs, setTxs] = useState<WalletTransaction[]>([]);
@@ -47,6 +51,21 @@ export default function Wallet() {
   };
   useEffect(() => { load(); }, []);
 
+  // 가상계좌/무통장 충전분은 카드전표 같은 자동 증빙이 없어 세금계산서를 발급해야 하므로,
+  // 사업자등록번호와 이메일이 회사정보에 있는지 미리 확인해 안내한다.
+  useEffect(() => {
+    if (!user) return;
+    fetchProfile(user.id)
+      .then((p) => setMissingInvoiceInfo(!p.bizNo.trim() || !p.email.trim()))
+      .catch(() => {});
+  }, [user?.id]);
+
+  const confirmInvoiceInfo = () =>
+    !missingInvoiceInfo ||
+    confirm('회사정보에 사업자등록번호 또는 이메일이 없어 세금계산서를 발급받을 수 없습니다.
+(카드 충전은 카드전표가 증빙이라 해당 없음)
+그래도 계속 진행할까요?');
+
   // 나이스페이 결제 후 backend가 /wallet?nicepay=success|fail 로 돌려보낸다.
   useEffect(() => {
     const status = params.get('nicepay');
@@ -64,6 +83,7 @@ export default function Wallet() {
 
   const issueVa = async () => {
     if (vaAmount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
+    if (!confirmInvoiceInfo()) return;
     setVaIssuing(true);
     try {
       const result = await issueVirtualAccount(vaAmount);
@@ -81,6 +101,7 @@ export default function Wallet() {
   const submit = async () => {
     if (amount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
     if (!depositorName.trim()) return notify('입금자명을 입력해주세요.', 'warning');
+    if (!confirmInvoiceInfo()) return;
     setSubmitting(true);
     try {
       await requestDeposit(amount, depositorName);
@@ -119,6 +140,16 @@ export default function Wallet() {
         무통장입금으로 충전 신청을 하면 확인 후 반영됩니다.
       </p>
 
+      {missingInvoiceInfo && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
+          <span>
+            가상계좌·무통장입금으로 충전하시면 충전분에 대한 <b>세금계산서를 발급</b>해드립니다.
+            발급을 위해 <b>사업자등록번호와 이메일</b>을 회사정보에 입력해주세요. (카드 충전은 카드전표가 증빙이라 필요 없습니다)
+          </span>
+          <Link to="/profile" className="shrink-0 bg-slate-900 text-white px-3 py-1.5 rounded-md hover:bg-slate-800">회사정보 입력</Link>
+        </div>
+      )}
+
       <div className="bg-slate-900 text-white rounded-xl p-6 flex items-center justify-between">
         <span className="text-slate-300">현재 잔액</span>
         <span className="text-3xl font-bold">{loading ? '...' : (wallet?.balance ?? 0).toLocaleString('ko-KR')} P</span>
@@ -143,7 +174,7 @@ export default function Wallet() {
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <h3 className="font-semibold text-slate-800 mb-1">가상계좌로 충전 (자동 반영)</h3>
-        <p className="text-xs text-slate-400 mb-3">충전 신청마다 1회용 입금 계좌가 발급됩니다. 그 계좌로 입금하면 관리자 승인 없이 자동으로 잔액에 반영됩니다.</p>
+        <p className="text-xs text-slate-400 mb-3">충전 신청마다 1회용 입금 계좌가 발급됩니다. 그 계좌로 입금하면 관리자 승인 없이 자동으로 잔액에 반영되며, 사업자 회원께는 세금계산서를 발급해드립니다.</p>
         <div className="flex flex-wrap gap-2 mb-3">
           {PRESET_AMOUNTS.map((v) => (
             <button key={v} type="button" onClick={() => setVaAmount(v)}
