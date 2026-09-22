@@ -3,16 +3,28 @@ import type { Wallet, WalletTransaction } from '../types/wallet';
 
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string | undefined) || 'http://localhost:3002';
 
+// 관리자 계정에는 "본인 지갑만" 정책 외에 "관리자는 전체 지갑 조회 가능" 정책도 함께 걸려있어서,
+// owner_id로 걸러주지 않으면 전체 회원의 지갑/거래내역이 섞여서 나온다(관리자 화면에서 잔액이
+// 0으로 보이거나 다른 회원 내역이 보이는 원인). 반드시 현재 로그인한 사용자 id로 직접 필터링한다.
+async function currentUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) throw new Error('로그인이 필요합니다.');
+  return data.user.id;
+}
+
 export async function fetchMyWallet(): Promise<Wallet> {
-  const { data, error } = await supabase.from('wallets').select('*').single();
+  const uid = await currentUserId();
+  const { data, error } = await supabase.from('wallets').select('*').eq('owner_id', uid).maybeSingle();
   if (error) throw error;
-  return data as Wallet;
+  return (data ?? { owner_id: uid, balance: 0, updated_at: new Date().toISOString() }) as Wallet;
 }
 
 export async function fetchMyTransactions(): Promise<WalletTransaction[]> {
+  const uid = await currentUserId();
   const { data, error } = await supabase
     .from('wallet_transactions')
     .select('*')
+    .eq('owner_id', uid)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as WalletTransaction[];
