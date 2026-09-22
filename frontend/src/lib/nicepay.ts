@@ -47,3 +47,37 @@ export async function requestNicePayCharge(
     },
   });
 }
+
+/**
+ * 나이스페이 가상계좌를 발급받는다(카드결제와 같은 결제창 Server 승인 모델).
+ * 계좌 "채번"까지만 이 흐름으로 처리되고, 실제 입금 완료는 나이스페이가 보내는
+ * 웹훅(backend의 /api/payments/nicepay/virtual-account/webhook)으로 별도 통보된다.
+ * @docs https://github.com/nicepayments/nicepay-manual/blob/main/api/payment-window-server.md
+ */
+export async function requestNicePayVirtualAccount(
+  amount: number,
+  userId: string,
+  vbankHolder: string,
+  onError: (message: string) => void
+) {
+  const clientId = import.meta.env.VITE_NICEPAY_CLIENT_ID as string | undefined;
+  if (!clientId) {
+    onError('나이스페이 클라이언트 키가 설정되지 않았습니다. frontend/.env 의 VITE_NICEPAY_CLIENT_ID 를 확인하세요.');
+    return;
+  }
+  const backendUrl = (import.meta.env.VITE_BACKEND_URL as string | undefined) || 'http://localhost:3002';
+
+  const AUTHNICE = await loadNicePaySdk();
+  AUTHNICE.requestPay({
+    clientId,
+    method: 'vbank',
+    orderId: generateOrderId(userId),
+    amount,
+    goodsName: `Birdie Bill 포인트 충전 ${amount.toLocaleString('ko-KR')}원`,
+    vbankHolder,
+    returnUrl: `${backendUrl}/api/payments/nicepay/virtual-account/return`,
+    fnError: (result: { msg?: string; errorMsg?: string }) => {
+      onError(result?.msg || result?.errorMsg || '결제창 오류가 발생했습니다.');
+    },
+  });
+}

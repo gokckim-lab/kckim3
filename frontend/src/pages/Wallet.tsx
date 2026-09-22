@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fetchProfile } from '../lib/profile';
 import { fetchMyWallet, fetchMyTransactions, requestDeposit, requestRefund } from '../lib/wallet';
-import { issueVirtualAccount, type VirtualAccountResult } from '../lib/backendApi';
+import { requestNicePayVirtualAccount } from '../lib/nicepay';
 import NicePayChargeButton from '../components/NicePayChargeButton';
 import type { Wallet as WalletType, WalletTransaction } from '../types/wallet';
 
@@ -32,7 +32,8 @@ export default function Wallet() {
   const [cardAmount, setCardAmount] = useState(50000);
   const [vaAmount, setVaAmount] = useState(50000);
   const [vaIssuing, setVaIssuing] = useState(false);
-  const [vaResult, setVaResult] = useState<VirtualAccountResult | null>(null);
+  const [vaHolder, setVaHolder] = useState('');
+  const [vaResult, setVaResult] = useState<{ bankName: string; accountNum: string; expireDate: string; holder: string; amount: number } | null>(null);
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundAccountInfo, setRefundAccountInfo] = useState('');
   const [refunding, setRefunding] = useState(false);
@@ -56,7 +57,10 @@ export default function Wallet() {
   useEffect(() => {
     if (!user) return;
     fetchProfile(user.id)
-      .then((p) => setMissingInvoiceInfo(!p.bizNo.trim() || !p.email.trim()))
+      .then((p) => {
+        setMissingInvoiceInfo(!p.bizNo.trim() || !p.email.trim());
+        setVaHolder((prev) => prev || p.name.trim());
+      })
       .catch(() => {});
   }, [user?.id]);
 
@@ -79,22 +83,48 @@ export default function Wallet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 가상계좌 발급 후 backend가 /wallet?vbank=success|fail 로 돌려보낸다. 발급(채번)만 된 것이고,
+  // 실제 입금 완료는 나중에 웹훅으로 따로 반영되므로 여기서는 잔액을 다시 불러오지 않는다.
+  useEffect(() => {
+    const status = params.get('vbank');
+    if (!status) return;
+    if (status === 'success') {
+      setVaResult({
+        bankName: params.get('bankName') || '',
+        accountNum: params.get('accountNum') || '',
+        expireDate: params.get('expireDate') || '',
+        holder: params.get('holder') || '',
+        amount: Number(params.get('amount') || 0),
+      });
+    } else if (status === 'fail') {
+      notify(`가상계좌 발급에 실패했습니다: ${params.get('reason') || '알 수 없는 오류'}`, 'error');
+    }
+    setParams((prev) => {
+      ['vbank', 'bankName', 'accountNum', 'expireDate', 'holder', 'amount'].forEach((k) => prev.delete(k));
+      return prev;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const issueVa = async () => {
+    if (!user) return;
     if (vaAmount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
+    if (!vaHolder.trim()) return notify('예금주명을 입력해주세요.', 'warning');
     if (!confirmInvoiceInfo()) return;
     setVaIssuing(true);
     try {
-      const result = await issueVirtualAccount(vaAmount);
-      setVaResult(result);
+      await requestNicePayVirtualAccount(vaAmount, user.id, vaHolder.trim(), (message) => {
+        notify(message, 'error');
+        setVaIssuing(false);
+      });
+      // 정상 흐름이면 나이스페이 결제창으로 이동하면서 이 페이지를 벗어난다.
     } catch (e: any) {
       notify(e.message, 'error');
-    } finally {
       setVaIssuing(false);
     }
   };
 
-  const fmtVaExpire = (r: VirtualAccountResult) =>
-    `${r.expireDate.slice(0, 4)}-${r.expireDate.slice(4, 6)}-${r.expireDate.slice(6, 8)} ${r.expireTime.slice(0, 2)}:${r.expireTime.slice(2, 4)}`;
+  const fmtVaExpire = (v: string) => (v ? new Date(v).toLocaleString('ko-KR') : '-');
 
   const submit = async () => {
     if (amount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
@@ -184,14 +214,16 @@ export default function Wallet() {
             value={vaAmount === 0 ? '' : vaAmount}
             onChange={(e) => setVaAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
         </div>
+        <input className="w-full border border-slate-300 rounded-md px-2 py-1.5 text-sm mb-3" value={vaHolder}
+          onChange={(e) => setVaHolder(e.target.value)} placeholder="예금주명 (보통 우리 회사 상호)" />
         <button onClick={issueVa} disabled={vaIssuing}
           className="bg-slate-900 text-white px-4 py-2 rounded-md text-sm hover:bg-slate-800 disabled:opacity-60">
-          {vaIssuing ? '발급 중...' : `${vaAmount.toLocaleString('ko-KR')}원 가상계좌 발급받기`}
+          {vaIssuing ? '결제창 여는 중...' : `${vaAmount.toLocaleString('ko-KR')}원 가상계좌 발급받기`}
         </button>
         {vaResult && (
           <div className="mt-3 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2 text-sm text-emerald-800">
             <b>{vaResult.bankName} {vaResult.accountNum}</b>로 <b>{vaResult.amount.toLocaleString('ko-KR')}원</b> 입금해주세요.
-            <br />입금 기한: {fmtVaExpire(vaResult)}까지 (이후 만료)
+            <br />입금 기한: {fmtVaExpire(vaResult.expireDate)}까지 (이후 만료)
           </div>
         )}
       </div>
