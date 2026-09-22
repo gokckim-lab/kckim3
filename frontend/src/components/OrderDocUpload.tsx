@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 import { extractOrderDocument, type ExtractProgress, type OrderDocResult } from '../lib/orderDocExtract';
 import { useToast } from '../context/ToastContext';
 
@@ -11,6 +11,7 @@ interface Props {
 export default function OrderDocUpload({ label, onExtracted }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<ExtractProgress | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const notify = useToast();
 
   const handleFile = async (file: File | null) => {
@@ -34,8 +35,21 @@ export default function OrderDocUpload({ label, onExtracted }: Props) {
     }
   };
 
+  const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragOver(true); };
+  const onDragLeave = () => setDragOver(false);
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFile(e.dataTransfer.files?.[0] ?? null);
+  };
+
   return (
-    <div className="flex items-center gap-2">
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={`flex items-center gap-2 rounded-md ${dragOver ? 'ring-2 ring-blue-400 ring-offset-1' : ''}`}
+    >
       <input
         ref={inputRef}
         type="file"
@@ -49,7 +63,7 @@ export default function OrderDocUpload({ label, onExtracted }: Props) {
         disabled={!!progress?.running}
         className="text-xs px-3 py-1.5 rounded-md border border-blue-300 text-blue-700 bg-white hover:bg-blue-50 disabled:opacity-60"
       >
-        {progress?.running ? `${progress.status} (${progress.percent}%)` : `📎 ${label} 불러오기`}
+        {progress?.running ? `${progress.status} (${progress.percent}%)` : dragOver ? '여기에 놓으세요' : `📎 ${label} 불러오기 (끌어다 놓기 가능)`}
       </button>
       {progress?.running && (
         <div className="w-28 h-1.5 bg-slate-200 rounded-full overflow-hidden">
