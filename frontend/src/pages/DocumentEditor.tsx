@@ -189,7 +189,12 @@ export default function DocumentEditor() {
       if (result.emailSent) {
         notify(`공급받는자(${doc.customer.email})에게 이메일을 발송했습니다.`, 'success');
       } else {
-        notify(`이메일 자동발송에 실패했습니다: ${result.emailError ?? '알 수 없는 오류'}. 아래 "이메일 재발송" 버튼으로 다시 시도할 수 있습니다.`, 'warning');
+        notify(`공급받는자 이메일 자동발송에 실패했습니다: ${result.emailError ?? '알 수 없는 오류'}. 아래 "이메일 재발송" 버튼으로 다시 시도할 수 있습니다.`, 'warning');
+      }
+      if (result.supplierEmailSent) {
+        notify(`공급자(${doc.supplier.email})에게 이메일을 발송했습니다.`, 'success');
+      } else {
+        notify(`공급자 이메일 자동발송에 실패했습니다: ${result.supplierEmailError ?? '알 수 없는 오류'}.`, 'warning');
       }
       const refreshed = await store.get(doc.id);
       setDoc(refreshed);

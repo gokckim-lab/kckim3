@@ -30,6 +30,8 @@ export interface IssueResult {
   walletBalance: number;
   emailSent: boolean;
   emailError?: string;
+  supplierEmailSent: boolean;
+  supplierEmailError?: string;
 }
 
 export async function issueTaxInvoice(documentId: string): Promise<IssueResult> {

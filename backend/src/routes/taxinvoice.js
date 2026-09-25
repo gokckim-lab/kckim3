@@ -12,10 +12,11 @@ const ISSUE_PRICE = Number(process.env.POPBILL_ISSUE_PRICE || 200);
 
 const onlyDigits = (v) => String(v || '').replace(/\D/g, '');
 
-// 발행 완료 후 공급받는자 이메일로 세금계산서 발송 (실패해도 발행 자체는 이미 끝난 상태이므로 예외를 던지지 않는다)
+// 발행 완료 후 이메일로 세금계산서 발송 (실패해도 발행 자체는 이미 끝난 상태이므로 예외를 던지지 않는다)
+// 팝빌 sendEmail은 한 번에 수신자 한 명만 받으므로, 공급자/공급받는자에게 각각 보내려면 두 번 호출해야 한다.
 function sendTaxinvoiceEmail(mgtKey, receiver) {
   return new Promise((resolve) => {
-    if (!receiver) return resolve({ sent: false, reason: '공급받는자 이메일이 입력되지 않았습니다.' });
+    if (!receiver) return resolve({ sent: false, reason: '이메일이 입력되지 않았습니다.' });
     taxinvoiceService.sendEmail(
       CORP_NUM,
       popbill.MgtKeyType.SELL,
@@ -160,9 +161,12 @@ router.post('/issue', requireAuth, async (req, res) => {
         })
         .eq('id', documentId);
 
-      // 공급받는자에게 세금계산서 이메일 자동 발송. 실패해도 발행 자체는 이미 성공했으므로
-      // 응답의 emailSent 값으로만 알리고, 발행 응답 자체를 실패로 바꾸지 않는다.
-      const emailResult = await sendTaxinvoiceEmail(doc.doc_no, (doc.customer || {}).email);
+      // 공급받는자·공급자 양쪽에 세금계산서 이메일 자동 발송. 실패해도 발행 자체는 이미 성공했으므로
+      // 응답의 emailSent/supplierEmailSent 값으로만 알리고, 발행 응답 자체를 실패로 바꾸지 않는다.
+      const [emailResult, supplierEmailResult] = await Promise.all([
+        sendTaxinvoiceEmail(doc.doc_no, (doc.customer || {}).email),
+        sendTaxinvoiceEmail(doc.doc_no, (doc.supplier || {}).email),
+      ]);
 
       res.json({
         ok: true,
@@ -172,6 +176,8 @@ router.post('/issue', requireAuth, async (req, res) => {
         walletBalance: newBalance,
         emailSent: emailResult.sent,
         emailError: emailResult.sent ? undefined : emailResult.reason,
+        supplierEmailSent: supplierEmailResult.sent,
+        supplierEmailError: supplierEmailResult.sent ? undefined : supplierEmailResult.reason,
       });
     },
     async (err) => {
