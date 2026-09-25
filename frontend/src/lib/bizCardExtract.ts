@@ -98,13 +98,19 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     // 그 쓰레기가 정확히 어떤 모양일지 예측할 수 없어 패턴으로 걸러내는 대신, 값 사이의 넓은 공백(2칸 이상)을
     // 열 경계로 삼아 먼저 업태 칸/종목 칸으로 나눈 뒤, 각 칸에서 맨 앞 토큰(라벨/깨진 체크박스)만 잘라내고
     // 나머지를 값으로 쓴다 — "사업의종류[FH 도매및소매업" → 앞 토큰 버림 → "도매및소매업".
+    // 흐릿한 사진 스캔본은 "류" 한 글자만 다른 글자로 잘못 읽혀도(예: "종류"→"종2") 정확히 일치하는
+    // "사업의종류"를 못 찾으므로, "류"는 있으면 좋고 없어도 되는 정도로만 요구한다.
     if (!bizType || !bizItem) {
-      const bizRow = lines.find((l) => /사\s*업\s*의\s*종\s*류/.test(l));
+      const bizRow = lines.find((l) => /사\s*업\s*의\s*종\s*류?/.test(l));
       if (bizRow) {
+        // 흐릿한 사진은 라벨/체크박스 자리뿐 아니라 값 자체도 OCR이 알파벳·기호 쓰레기로
+        // 뭉개버릴 수 있다(예: "도매및소매업" → "SHYLA"). 한글이 하나도 없는 칸은 사업 종류로
+        // 보기 어려우므로 자리는 유지한 채 빈칸으로 둬서(오인식된 값을 채우는 대신) 사용자가
+        // 직접 입력하게 한다 — 앞 칸이 쓰레기라고 뒤 칸(종목) 값을 업태 자리로 당겨쓰면 안 된다.
         const cols = bizRow
           .split(/\s{2,}/)
           .map((seg) => seg.trim().split(/\s+/).slice(1).join(' ').trim())
-          .filter(Boolean);
+          .map((v) => (v && /[가-힣]/.test(v) ? v : ''));
         if (!bizType && cols[0]) bizType = cols[0];
         if (!bizItem && cols[1]) bizItem = cols[1];
       }
