@@ -57,13 +57,18 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     // 아니라 여러 칸이면 "글자+공백 1칸" 반복 패턴에 안 걸려서 그대로 남는다 — 큰 제목 라벨
     // ("상   호", "성   명")일수록 이런 넓은 간격이 잘 생긴다). 그래서 값을 미리 뭉쳐 놓는 데
     // 기대지 않고, 라벨 자체를 글자 사이 \s*를 넣어 널널하게 매칭한다.
-    let name = findLabelValueWithPrevFallback(lines, '상\\s*호\\s*(?:\\(\\s*법\\s*인\\s*명\\s*\\))?');
+    // 개인사업자 증명서는 "상호(법인명)", 법인사업자 증명서는 "법인명(단체명)"을 쓴다 — 서식이
+    // 다르면 라벨 자체가 다르므로 둘 다 받아 준다.
+    let name = findLabelValueWithPrevFallback(
+      lines,
+      '상\\s*호\\s*(?:\\(\\s*법\\s*인\\s*명\\s*\\))?|법\\s*인\\s*명\\s*(?:\\(\\s*단\\s*체\\s*명\\s*\\))?'
+    );
     if (!name) {
-      const m = normalized.match(/\(주\)[^\n]{1,30}|주식회사[^\n]{1,20}|[^\n]{1,20}\s*(?:주식회사|㈜)/);
+      const m = normalized.match(/\(주\)[^\n]{1,30}|주식회사[^\n]{1,20}|[^\n]{1,20}\s*(?:\(주\)|주식회사|㈜)/);
       if (m) name = m[0].trim();
     }
     // "버디 (법인명)" 처럼 라벨 잔재가 값 앞에 남는 경우를 대비해 선행 괄호 라벨을 한 번 더 제거
-    name = name.replace(/^\(?법인명\)?\s*/, '').trim();
+    name = name.replace(/^\(?(?:법인명|단체명)\)?\s*/, '').trim();
 
     let ceo = findLabelValueWithPrevFallback(
       lines,
