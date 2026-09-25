@@ -53,7 +53,11 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
       normalized.match(/(?<!\d)(\d{10})(?!\d)/);
     const bizNo = bizNoMatch ? normalizeBizNo(bizNoMatch[1]) : '';
 
-    let name = findLabelValueWithPrevFallback(lines, '상호\\s*(?:\\(법인명\\))?');
+    // 라벨 글자 사이 간격은 collapseSpacedOutText가 못 지우는 경우가 있다(공백이 한 칸이
+    // 아니라 여러 칸이면 "글자+공백 1칸" 반복 패턴에 안 걸려서 그대로 남는다 — 큰 제목 라벨
+    // ("상   호", "성   명")일수록 이런 넓은 간격이 잘 생긴다). 그래서 값을 미리 뭉쳐 놓는 데
+    // 기대지 않고, 라벨 자체를 글자 사이 \s*를 넣어 널널하게 매칭한다.
+    let name = findLabelValueWithPrevFallback(lines, '상\\s*호\\s*(?:\\(\\s*법\\s*인\\s*명\\s*\\))?');
     if (!name) {
       const m = normalized.match(/\(주\)[^\n]{1,30}|주식회사[^\n]{1,20}|[^\n]{1,20}\s*(?:주식회사|㈜)/);
       if (m) name = m[0].trim();
@@ -61,10 +65,18 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     // "버디 (법인명)" 처럼 라벨 잔재가 값 앞에 남는 경우를 대비해 선행 괄호 라벨을 한 번 더 제거
     name = name.replace(/^\(?법인명\)?\s*/, '').trim();
 
-    let ceo = findLabelValueWithPrevFallback(lines, '성명\\s*(?:\\(대표자\\))?|대표자\\s*성명(?:\\([^)]*\\))?|대표자');
+    let ceo = findLabelValueWithPrevFallback(
+      lines,
+      '성\\s*명\\s*(?:\\(\\s*대\\s*표\\s*자\\s*\\))?|대\\s*표\\s*자\\s*성\\s*명(?:\\([^)]*\\))?|대\\s*표\\s*자'
+    );
+    // 값 뒤에 같은 줄로 다음 항목(생년월일 등)이 넓은 공백을 사이에 두고 이어 붙는 경우가
+    // 많아서, 공백 2칸 이상을 열 경계로 보고 그 앞부분만 잘라 쓴다.
     ceo = ceo.replace(/^\([^)]*\)\s*/, '').split(/\s{2,}|\t/)[0].trim();
 
-    let address = findLabelValueWithPrevFallback(lines, '사업장\\s*소재지|소재지|본점\\s*소재지');
+    let address = findLabelValueWithPrevFallback(
+      lines,
+      '사\\s*업\\s*장\\s*소\\s*재\\s*지|소\\s*재\\s*지|본\\s*점\\s*소\\s*재\\s*지'
+    );
     if (!address) {
       const m = normalized.match(/(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]{5,60}/);
       if (m) address = m[0].trim();
@@ -74,6 +86,24 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     let bizItem = findLabelValueWithPrevFallback(lines, '종\\s*목');
     // "도매업 종목 사무용품"처럼 업태 값 뒤에 다음 라벨(종목)이 같은 줄에 붙어 나오면 거기서 잘라낸다
     bizType = bizType.split(/\s*종\s*목\s*/)[0].trim();
+
+    // 사업자등록증의 "사업의 종류" 표는 "업태"/"종목" 라벨이 줄 맨 앞이 아니라 "사업의 종류 [업태] 값1  [종목] 값2"처럼
+    // 같은 줄 중간에 체크박스 글자로 박혀 있어서, 줄 시작만 보는 findLineValue로는 애초에 못 찾는다.
+    // 게다가 그 체크박스([업태]/[종목])는 OCR이 자주 깨뜨린다(예: "[FH", "[총록|" 같은 글자 쓰레기로 변함).
+    // 그 쓰레기가 정확히 어떤 모양일지 예측할 수 없어 패턴으로 걸러내는 대신, 값 사이의 넓은 공백(2칸 이상)을
+    // 열 경계로 삼아 먼저 업태 칸/종목 칸으로 나눈 뒤, 각 칸에서 맨 앞 토큰(라벨/깨진 체크박스)만 잘라내고
+    // 나머지를 값으로 쓴다 — "사업의종류[FH 도매및소매업" → 앞 토큰 버림 → "도매및소매업".
+    if (!bizType || !bizItem) {
+      const bizRow = lines.find((l) => /사\s*업\s*의\s*종\s*류/.test(l));
+      if (bizRow) {
+        const cols = bizRow
+          .split(/\s{2,}/)
+          .map((seg) => seg.trim().split(/\s+/).slice(1).join(' ').trim())
+          .filter(Boolean);
+        if (!bizType && cols[0]) bizType = cols[0];
+        if (!bizItem && cols[1]) bizItem = cols[1];
+      }
+    }
 
     const emailMatch = normalized.match(/([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/);
     const email = emailMatch?.[1] ?? '';
