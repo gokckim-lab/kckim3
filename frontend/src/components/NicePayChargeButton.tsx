@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { requestNicePayCharge } from '../lib/nicepay';
+import { requestNicePayCharge, type BuyerInfo } from '../lib/nicepay';
 
-export default function NicePayChargeButton({ amount }: { amount: number }) {
+export default function NicePayChargeButton({ amount, buyer }: { amount: number; buyer?: BuyerInfo }) {
   const { user } = useAuth();
   const notify = useToast();
   const [busy, setBusy] = useState(false);
@@ -15,7 +15,7 @@ export default function NicePayChargeButton({ amount }: { amount: number }) {
       await requestNicePayCharge(amount, user.id, (message) => {
         notify(message, 'error');
         setBusy(false);
-      });
+      }, buyer);
       // 정상 흐름이면 나이스페이 결제창으로 이동하면서 이 페이지를 벗어난다.
     } catch (e: any) {
       notify(e.message, 'error');

@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { fetchProfile } from '../lib/profile';
 import { fetchMyWallet, fetchMyTransactions, requestDeposit, requestRefund } from '../lib/wallet';
 import { requestNicePayVirtualAccount } from '../lib/nicepay';
+import type { PartyInfo } from '../types';
 import NicePayChargeButton from '../components/NicePayChargeButton';
 import type { Wallet as WalletType, WalletTransaction } from '../types/wallet';
 
@@ -22,6 +23,7 @@ export default function Wallet() {
   const notify = useToast();
   const { user } = useAuth();
   const [missingInvoiceInfo, setMissingInvoiceInfo] = useState(false);
+  const [profile, setProfile] = useState<PartyInfo | null>(null);
   const [params, setParams] = useSearchParams();
   const [wallet, setWallet] = useState<WalletType | null>(null);
   const [txs, setTxs] = useState<WalletTransaction[]>([]);
@@ -58,6 +60,7 @@ export default function Wallet() {
     if (!user) return;
     fetchProfile(user.id)
       .then((p) => {
+        setProfile(p);
         setMissingInvoiceInfo(!p.bizNo.trim() || !p.email.trim());
         setVaHolder((prev) => prev || p.name.trim());
       })
@@ -106,6 +109,12 @@ export default function Wallet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 나이스페이 결제창의 "현금영수증 신청" 휴대폰번호 입력을 회사정보 전화번호로 미리 채워준다.
+  // 하이픈이 있으면 나이스페이가 거부하므로 숫자만 남긴다.
+  const buyerInfo = profile
+    ? { buyerName: profile.name || undefined, buyerTel: profile.tel?.replace(/\D/g, '') || undefined, buyerEmail: profile.email || undefined }
+    : undefined;
+
   const issueVa = async () => {
     if (!user) return;
     if (vaAmount <= 0) return notify('충전 금액을 입력해주세요.', 'warning');
@@ -116,7 +125,7 @@ export default function Wallet() {
       await requestNicePayVirtualAccount(vaAmount, user.id, vaHolder.trim(), (message) => {
         notify(message, 'error');
         setVaIssuing(false);
-      });
+      }, buyerInfo);
       // 정상 흐름이면 나이스페이 결제창으로 이동하면서 이 페이지를 벗어난다.
     } catch (e: any) {
       notify(e.message, 'error');
@@ -197,7 +206,7 @@ export default function Wallet() {
             value={cardAmount === 0 ? '' : cardAmount}
             onChange={(e) => setCardAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
         </div>
-        <NicePayChargeButton amount={cardAmount} />
+        <NicePayChargeButton amount={cardAmount} buyer={buyerInfo} />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">

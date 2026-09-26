@@ -22,10 +22,17 @@ export function generateOrderId(userId: string) {
  * 거기서 서버가 승인 처리 + 포인트 적립 후 다시 /wallet 으로 돌려보낸다.
  * 즉 이 함수 자체는 성공/실패를 반환하지 않는다(브라우저가 이동해버리므로).
  */
+export interface BuyerInfo {
+  buyerName?: string;
+  buyerTel?: string;
+  buyerEmail?: string;
+}
+
 export async function requestNicePayCharge(
   amount: number,
   userId: string,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  buyer?: BuyerInfo
 ) {
   const clientId = import.meta.env.VITE_NICEPAY_CLIENT_ID as string | undefined;
   if (!clientId) {
@@ -42,6 +49,7 @@ export async function requestNicePayCharge(
     amount,
     goodsName: `Birdie Bill 포인트 충전 ${amount.toLocaleString('ko-KR')}원`,
     returnUrl: `${backendUrl}/api/payments/nicepay/return`,
+    ...buyer,
     fnError: (result: { msg?: string; errorMsg?: string }) => {
       onError(result?.msg || result?.errorMsg || '결제창 오류가 발생했습니다.');
     },
@@ -58,7 +66,8 @@ export async function requestNicePayVirtualAccount(
   amount: number,
   userId: string,
   vbankHolder: string,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  buyer?: BuyerInfo
 ) {
   const clientId = import.meta.env.VITE_NICEPAY_CLIENT_ID as string | undefined;
   if (!clientId) {
@@ -76,6 +85,7 @@ export async function requestNicePayVirtualAccount(
     goodsName: `Birdie Bill 포인트 충전 ${amount.toLocaleString('ko-KR')}원`,
     vbankHolder,
     returnUrl: `${backendUrl}/api/payments/nicepay/virtual-account/return`,
+    ...buyer,
     fnError: (result: { msg?: string; errorMsg?: string }) => {
       onError(result?.msg || result?.errorMsg || '결제창 오류가 발생했습니다.');
     },
