@@ -650,3 +650,18 @@ create table if not exists public.account_deletion_archive (
   retain_until date not null default ((current_date + interval '5 years')::date)
 );
 alter table public.account_deletion_archive enable row level security;
+
+-- ----------------------------------------------------------------------
+-- 세금계산서 발행취소 / 수정세금계산서: 발행취소(cancelIssue)는 국세청 전송 전에만 가능하고,
+-- 이미 전송된 건은 사유코드 1~6(기재사항 착오정정/공급가액 변동/환입/계약의 해제/
+-- 내국신용장 사후개설/착오에 의한 이중발급)으로 수정세금계산서를 새로 발행해야 한다.
+-- 수정세금계산서는 원본을 가리키는 별도의 documents 행(revises_document_id)으로 만들고,
+-- 발행 시 원본의 popbill_nts_confirm_num을 팝빌 orgNTSConfirmNum으로 함께 보낸다.
+-- ----------------------------------------------------------------------
+alter table public.documents
+  add column if not exists revises_document_id uuid references public.documents(id) on delete set null,
+  add column if not exists modify_code smallint check (modify_code between 1 and 6);
+
+alter table public.documents drop constraint if exists documents_popbill_status_check;
+alter table public.documents add constraint documents_popbill_status_check
+  check (popbill_status in ('NONE', 'ISSUED', 'FAILED', 'CANCELED'));

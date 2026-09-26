@@ -45,7 +45,17 @@ export const emptyItem = (order = 0): DocumentItem => ({
   sort_order: order, name: '', spec: '', qty: 1, unit_price: 0, supply_price: 0, tax: 0, remark: '',
 });
 
-export type PopbillStatus = 'NONE' | 'ISSUED' | 'FAILED';
+export type PopbillStatus = 'NONE' | 'ISSUED' | 'FAILED' | 'CANCELED';
+
+// 수정세금계산서 사유코드 (팝빌 modifyCode 1~6)
+export const MODIFY_CODE_LABEL: Record<number, string> = {
+  1: '기재사항 착오정정',
+  2: '공급가액 변동',
+  3: '환입',
+  4: '계약의 해제',
+  5: '내국신용장 사후개설',
+  6: '착오에 의한 이중발급',
+};
 
 export interface DocumentRecord {
   id: string;
@@ -63,6 +73,8 @@ export interface DocumentRecord {
   tax_total: number;
   grand_total: number;
   source_document_id: string | null;
+  revises_document_id: string | null;
+  modify_code: number | null;
   popbill_status: PopbillStatus;
   popbill_mgt_key: string | null;
   popbill_nts_confirm_num: string | null;

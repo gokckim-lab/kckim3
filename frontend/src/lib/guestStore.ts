@@ -75,6 +75,8 @@ export function createGuestDoc(draft: DocumentDraft): DocumentRecord {
     due_date: draft.due_date,
     memo: draft.memo,
     source_document_id: draft.source_document_id ?? null,
+    revises_document_id: draft.revises_document_id ?? null,
+    modify_code: draft.modify_code ?? null,
     popbill_status: 'NONE',
     popbill_mgt_key: null,
     popbill_nts_confirm_num: null,

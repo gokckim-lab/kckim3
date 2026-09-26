@@ -49,6 +49,8 @@ export interface DocumentDraft {
   memo: string;
   items: DocumentItem[];
   source_document_id?: string | null;
+  revises_document_id?: string | null;
+  modify_code?: number | null;
 }
 
 export async function createDocument(ownerId: string, userId: string, draft: DocumentDraft): Promise<DocumentRecord> {
@@ -71,6 +73,8 @@ export async function createDocument(ownerId: string, userId: string, draft: Doc
         due_date: draft.due_date,
         memo: draft.memo,
         source_document_id: draft.source_document_id ?? null,
+        revises_document_id: draft.revises_document_id ?? null,
+        modify_code: draft.modify_code ?? null,
         ...totals,
       })
       .select()

@@ -54,6 +54,16 @@ export async function resendTaxInvoiceEmail(documentId: string, email?: string) 
   return handle(res);
 }
 
+export async function cancelTaxInvoice(documentId: string, memo?: string) {
+  const headers = await authHeaders();
+  const res = await fetch(`${BASE_URL}/api/popbill/taxinvoice/${documentId}/cancel`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ memo }),
+  });
+  return handle(res);
+}
+
 export async function getTaxInvoicePopupUrl(documentId: string): Promise<string> {
   const headers = await authHeaders();
   const res = await fetch(`${BASE_URL}/api/popbill/taxinvoice/${documentId}/popup-url`, { headers });

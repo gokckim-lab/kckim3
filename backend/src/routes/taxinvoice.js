@@ -47,12 +47,14 @@ router.get('/check-member', requireAuth, (req, res) => {
   );
 });
 
-function buildTaxinvoice(doc, items) {
+// orgNTSConfirmNum: 수정세금계산서일 때만 넘긴다 — 원본(이 문서가 수정하는 세금계산서)의
+// 국세청승인번호. modifyCode(사유코드 1~6)와 함께 있어야 팝빌이 "수정발행"으로 처리한다.
+function buildTaxinvoice(doc, items, orgNTSConfirmNum) {
   const supplier = doc.supplier || {};
   const customer = doc.customer || {};
   const isCorp = customer.bizNo && onlyDigits(customer.bizNo).length === 10;
 
-  return {
+  const taxinvoice = {
     writeDate: (doc.issue_date || '').replace(/-/g, ''),
     chargeDirection: '정과금',
     issueType: '정발행',
@@ -101,6 +103,13 @@ function buildTaxinvoice(doc, items) {
       remark: it.remark || '',
     })),
   };
+
+  if (doc.modify_code && orgNTSConfirmNum) {
+    taxinvoice.modifyCode = String(doc.modify_code);
+    taxinvoice.orgNTSConfirmNum = orgNTSConfirmNum;
+  }
+
+  return taxinvoice;
 }
 
 // 문서(견적/주문/거래명세서) -> 세금계산서 등록+즉시발행
@@ -119,8 +128,31 @@ router.post('/issue', requireAuth, async (req, res) => {
   if (doc.popbill_status === 'ISSUED') {
     return res.status(409).json({ error: '이미 발행된 세금계산서입니다.' });
   }
+  if (doc.popbill_status === 'CANCELED') {
+    // 이 문서번호(doc_no)는 이미 팝빌에 발행취소로 기록되어 있어 그대로 재사용하면 안 된다.
+    // 다시 발행하려면 새 세금계산서 문서를 만들어야 한다.
+    return res.status(409).json({ error: '발행취소된 세금계산서입니다. 재발행하려면 새 세금계산서를 작성해주세요.' });
+  }
   if (!CORP_NUM || CORP_NUM === '0000000000') {
     return res.status(500).json({ error: '서버에 POPBILL_CORP_NUM 이 설정되지 않았습니다. backend/.env 를 확인하세요.' });
+  }
+
+  // 수정세금계산서(이 문서가 다른 문서를 수정하는 경우)는 원본의 국세청승인번호가 있어야
+  // 팝빌이 수정발행으로 처리한다 — 원본이 아직 발행 전이거나 취소된 상태면 승인번호가 없다.
+  let orgNTSConfirmNum;
+  if (doc.revises_document_id) {
+    const { data: original } = await supabaseAdmin
+      .from('documents')
+      .select('popbill_nts_confirm_num, popbill_status, created_by')
+      .eq('id', doc.revises_document_id)
+      .single();
+    if (!original || original.created_by !== req.user.id) {
+      return res.status(404).json({ error: '수정 대상 원본 세금계산서를 찾을 수 없습니다.' });
+    }
+    if (!original.popbill_nts_confirm_num) {
+      return res.status(409).json({ error: '원본 세금계산서가 아직 발행(국세청 승인)되지 않았습니다.' });
+    }
+    orgNTSConfirmNum = original.popbill_nts_confirm_num;
   }
 
   // 견적서/주문서/거래명세서는 무료, 세금계산서 "발행" 단계에서만 선불 포인트를 차감한다.
@@ -136,7 +168,7 @@ router.post('/issue', requireAuth, async (req, res) => {
     return res.status(402).json({ error: `포인트 잔액이 부족합니다. (건당 ${ISSUE_PRICE}포인트 필요) 충전 후 다시 시도해주세요.` });
   }
 
-  const taxinvoice = buildTaxinvoice(doc, doc.document_items);
+  const taxinvoice = buildTaxinvoice(doc, doc.document_items, orgNTSConfirmNum);
 
   const supplierName = (doc.supplier || {}).name || 'Birdie Bill';
 
@@ -192,6 +224,44 @@ router.post('/issue', requireAuth, async (req, res) => {
       });
       res.status(400).json({ error: err.message, code: err.code });
     }
+  );
+});
+
+// 발행취소: 국세청 전송 "전"에만 가능하다(팝빌이 그 시점을 판단해 실패시키므로 여기서는 상태만 확인).
+// 이미 국세청에 전송된 건은 팝빌이 에러로 거절하며, 그 경우 수정세금계산서로 처리해야 한다.
+// 발행 시 차감한 포인트는 취소 성공 시 환불한다.
+router.post('/:documentId/cancel', requireAuth, async (req, res) => {
+  const { documentId } = req.params;
+  const { memo } = req.body || {};
+
+  const { data: doc } = await supabaseAdmin
+    .from('documents')
+    .select('id, doc_no, owner_id, popbill_status, created_by')
+    .eq('id', documentId)
+    .single();
+
+  if (!doc || doc.created_by !== req.user.id) return res.status(404).json({ error: '문서를 찾을 수 없습니다.' });
+  if (doc.popbill_status !== 'ISSUED') return res.status(409).json({ error: '발행된 세금계산서만 취소할 수 있습니다.' });
+
+  taxinvoiceService.cancelIssue(
+    CORP_NUM,
+    popbill.MgtKeyType.SELL,
+    doc.doc_no,
+    memo || '',
+    USER_ID,
+    async () => {
+      await supabaseAdmin
+        .from('documents')
+        .update({ popbill_status: 'CANCELED' })
+        .eq('id', documentId);
+      const { data: newBalance } = await supabaseAdmin.rpc('wallet_refund', {
+        p_owner_id: doc.owner_id,
+        p_amount: ISSUE_PRICE,
+        p_document_id: documentId,
+      });
+      res.json({ ok: true, walletBalance: newBalance });
+    },
+    (err) => res.status(400).json({ error: err.message, code: err.code })
   );
 });
 

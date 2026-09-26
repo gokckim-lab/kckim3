@@ -12,11 +12,11 @@ import { fetchProfile } from '../lib/profile';
 import { NEXT_TYPE } from '../lib/documents';
 import { getDocStore } from '../lib/docStore';
 import { loadGuestSupplier, saveGuestSupplier } from '../lib/guestStore';
-import { issueTaxInvoice, getTaxInvoicePopupUrl, resendTaxInvoiceEmail } from '../lib/backendApi';
+import { issueTaxInvoice, getTaxInvoicePopupUrl, resendTaxInvoiceEmail, cancelTaxInvoice } from '../lib/backendApi';
 import { fetchMyWallet } from '../lib/wallet';
 import type { OrderDocResult } from '../lib/orderDocExtract';
 import type { CustomerRecord, DocType, DocumentItem, DocumentRecord, PartyInfo } from '../types';
-import { DOC_TYPE_LABEL, emptyParty } from '../types';
+import { DOC_TYPE_LABEL, emptyParty, MODIFY_CODE_LABEL } from '../types';
 
 // toISOString()은 UTC 기준이라 한국 시간 새벽(0~9시)에는 작성일이 하루 전으로 찍힌다.
 const todayLocal = () => {
@@ -29,6 +29,10 @@ export default function DocumentEditor() {
   const { type, id } = useParams<{ type: DocType; id: string }>();
   const [params] = useSearchParams();
   const sourceId = params.get('sourceId');
+  // 수정세금계산서 작성 흐름: 원본 문서 보기 화면의 "수정세금계산서 작성" 버튼이
+  // sourceId(내용 복사용)와 함께 넘겨준다. reviseId=원본 문서 id, modifyCode=수정사유(1~6).
+  const reviseId = params.get('reviseId');
+  const reviseModifyCode = params.get('modifyCode');
   const navigate = useNavigate();
   const { user } = useAuth();
   const notify = useToast();
@@ -48,7 +52,9 @@ export default function DocumentEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [revisionCode, setRevisionCode] = useState(1);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   useEffect(() => {
@@ -151,6 +157,8 @@ export default function DocumentEditor() {
       const draft = {
         type, customer_id: customerId, supplier, customer, issue_date: issueDate,
         due_date: dueDate || null, memo, items, source_document_id: doc?.source_document_id ?? sourceId ?? null,
+        revises_document_id: doc?.revises_document_id ?? reviseId ?? null,
+        modify_code: doc?.modify_code ?? (reviseModifyCode ? Number(reviseModifyCode) : null),
       };
       if (doc) {
         await store.update(doc.id, draft);
@@ -219,6 +227,33 @@ export default function DocumentEditor() {
     }
   };
 
+  // 발행취소: 팝빌이 국세청 전송 전인지 스스로 판단해 처리한다. 이미 전송된 건은 팝빌이
+  // 에러를 돌려주므로, 그때는 "수정세금계산서"로 안내한다.
+  const doCancel = async () => {
+    if (!doc) return;
+    if (!confirm('이 세금계산서 발행을 취소할까요? 국세청 전송 전인 경우에만 취소되며, 차감된 포인트는 환불됩니다.')) return;
+    setCanceling(true);
+    try {
+      await cancelTaxInvoice(doc.id);
+      notify('세금계산서 발행을 취소했습니다. 포인트가 환불되었습니다.', 'success');
+      const refreshed = await store.get(doc.id);
+      setDoc(refreshed);
+      fetchMyWallet().then((w) => setWalletBalance(w.balance)).catch(() => {});
+    } catch (e: any) {
+      notify(`발행취소 실패: ${e.message} (이미 국세청에 전송된 건은 취소 대신 "수정세금계산서 작성"을 이용해주세요.)`, 'error');
+    } finally {
+      setCanceling(false);
+    }
+  };
+
+  // 수정세금계산서 작성: 원본 내용을 복사한 새 문서를 만들고(sourceId), 원본을 가리키게
+  // 한 뒤(reviseId) 수정사유코드를 담아 편집 화면으로 이동한다. 실제 발행은 새 문서에서
+  // 내용을 필요한 대로 고친 뒤 평소처럼 "발행" 버튼을 누르면 된다.
+  const startRevision = () => {
+    if (!doc || !type) return;
+    navigate(`/documents/${type}/new?sourceId=${doc.id}&reviseId=${doc.id}&modifyCode=${revisionCode}`);
+  };
+
   const viewIssued = async () => {
     if (!doc) return;
     try {
@@ -243,6 +278,7 @@ export default function DocumentEditor() {
   const nextType = NEXT_TYPE[type];
   const isTaxInvoice = type === 'tax_invoice';
   const issued = doc?.popbill_status === 'ISSUED';
+  const canceledIssue = doc?.popbill_status === 'CANCELED';
   const issuePrice = Number(import.meta.env.VITE_ISSUE_PRICE ?? 200);
   const insufficientBalance = isTaxInvoice && walletBalance !== null && walletBalance < issuePrice;
 
@@ -266,7 +302,7 @@ export default function DocumentEditor() {
               {DOC_TYPE_LABEL[nextType]}로 변환 →
             </button>
           )}
-          {isTaxInvoice && doc && !issued && (
+          {isTaxInvoice && doc && !issued && !canceledIssue && (
             <button onClick={doIssue} disabled={issuing || insufficientBalance}
               title={insufficientBalance ? '포인트 잔액이 부족합니다. 포인트 메뉴에서 충전해주세요.' : undefined}
               className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-60">
@@ -289,6 +325,12 @@ export default function DocumentEditor() {
               {resendingEmail ? '발송 중...' : '이메일 재발송'}
             </button>
           )}
+          {isTaxInvoice && issued && (
+            <button onClick={doCancel} disabled={canceling}
+              className="px-4 py-2 text-sm border border-rose-300 text-rose-600 rounded-md hover:bg-rose-50 disabled:opacity-60">
+              {canceling ? '취소 처리 중...' : '발행취소'}
+            </button>
+          )}
           <button onClick={() => { void save(); }} disabled={saving || (isTaxInvoice && issued)}
             className="px-4 py-2 text-sm bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-60">
             {saving ? '저장 중...' : '저장'}
@@ -309,6 +351,36 @@ export default function DocumentEditor() {
       {doc?.popbill_status === 'FAILED' && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-md p-3 print:hidden">
           팝빌 발행 실패: {doc.popbill_last_error}
+        </div>
+      )}
+
+      {doc?.popbill_status === 'CANCELED' && (
+        <div className="bg-slate-100 border border-slate-200 text-slate-600 text-sm rounded-md p-3 print:hidden">
+          발행이 취소된 세금계산서입니다.
+        </div>
+      )}
+
+      {doc?.revises_document_id && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md p-3 print:hidden">
+          이 문서는 다른 세금계산서를 수정하는 <b>수정세금계산서</b>입니다
+          {doc.modify_code && <> · 사유: {MODIFY_CODE_LABEL[doc.modify_code]}</>}
+        </div>
+      )}
+
+      {isTaxInvoice && issued && !doc?.revises_document_id && (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3 print:hidden">
+          <div className="text-sm text-slate-600 flex-1">
+            이미 발행된 내용에 오류가 있거나 금액이 바뀌었나요? 수정세금계산서로 새로 발행할 수 있습니다.
+          </div>
+          <select className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={revisionCode}
+            onChange={(e) => setRevisionCode(Number(e.target.value))}>
+            {Object.entries(MODIFY_CODE_LABEL).map(([code, label]) => (
+              <option key={code} value={code}>{label}</option>
+            ))}
+          </select>
+          <button onClick={startRevision} className="px-4 py-2 text-sm border border-amber-300 text-amber-700 rounded-md hover:bg-amber-50 whitespace-nowrap">
+            수정세금계산서 작성
+          </button>
         </div>
       )}
 
