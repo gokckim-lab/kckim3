@@ -32,6 +32,7 @@ export default function Wallet() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cardAmount, setCardAmount] = useState(50000);
+  const [bankAmount, setBankAmount] = useState(50000);
   const [vaAmount, setVaAmount] = useState(50000);
   const [vaIssuing, setVaIssuing] = useState(false);
   const [vaHolder, setVaHolder] = useState('');
@@ -75,12 +76,14 @@ export default function Wallet() {
   useEffect(() => {
     const status = params.get('nicepay');
     if (!status) return;
+    // 카드결제/계좌이체 둘 다 같은 backend 콜백(/api/payments/nicepay/return)을 쓰므로
+    // 여기서는 결제수단을 구분하지 않고 공통 문구로 안내한다.
     if (status === 'success') {
       const amt = params.get('amount');
-      notify(`카드 충전이 완료됐습니다${amt ? ` (${Number(amt).toLocaleString('ko-KR')}원)` : ''}.`, 'success');
+      notify(`충전이 완료됐습니다${amt ? ` (${Number(amt).toLocaleString('ko-KR')}원)` : ''}.`, 'success');
       load();
     } else if (status === 'fail') {
-      notify(`카드 충전에 실패했습니다: ${params.get('reason') || '알 수 없는 오류'}`, 'error');
+      notify(`충전에 실패했습니다: ${params.get('reason') || '알 수 없는 오류'}`, 'error');
     }
     setParams((prev) => { prev.delete('nicepay'); prev.delete('amount'); prev.delete('reason'); return prev; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,7 +183,7 @@ export default function Wallet() {
       {missingInvoiceInfo && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900 flex flex-wrap items-center justify-between gap-2">
           <span>
-            가상계좌·무통장입금으로 충전하시면 충전분에 대한 <b>세금계산서를 발급</b>해드립니다.
+            계좌이체·가상계좌·무통장입금으로 충전하시면 충전분에 대한 <b>세금계산서를 발급</b>해드립니다.
             발급을 위해 <b>사업자등록번호와 이메일</b>을 회사정보에 입력해주세요. (카드 충전은 카드전표가 증빙이라 필요 없습니다)
           </span>
           <Link to="/profile" className="shrink-0 bg-slate-900 text-white px-3 py-1.5 rounded-md hover:bg-slate-800">회사정보 입력</Link>
@@ -206,7 +209,24 @@ export default function Wallet() {
             value={cardAmount === 0 ? '' : cardAmount}
             onChange={(e) => setCardAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
         </div>
-        <NicePayChargeButton amount={cardAmount} buyer={buyerInfo} />
+        <NicePayChargeButton amount={cardAmount} buyer={buyerInfo} method="card" />
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800 mb-1">계좌이체로 즉시 충전 (자동 반영)</h3>
+        <p className="text-xs text-slate-400 mb-3">본인 계좌에서 실시간으로 이체하는 방식입니다. 카드결제와 마찬가지로 관리자 확인 없이 즉시 잔액에 자동 반영됩니다 (나이스페이).</p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {PRESET_AMOUNTS.map((v) => (
+            <button key={v} type="button" onClick={() => setBankAmount(v)}
+              className={`px-3 py-1.5 rounded-md text-sm border ${bankAmount === v ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>
+              {v.toLocaleString('ko-KR')}원
+            </button>
+          ))}
+          <input type="number" step={1000} className="w-32 border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+            value={bankAmount === 0 ? '' : bankAmount}
+            onChange={(e) => setBankAmount(e.target.value === '' ? 0 : Number(e.target.value))} />
+        </div>
+        <NicePayChargeButton amount={bankAmount} buyer={buyerInfo} method="bank" onBeforePay={confirmInvoiceInfo} />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">

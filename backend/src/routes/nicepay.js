@@ -52,6 +52,10 @@ router.post('/return', express.urlencoded({ extended: true }), async (req, res) 
       return fail(approveJson.resultMsg || '결제 승인에 실패했습니다.');
     }
 
+    // 이 콜백은 카드결제와 계좌이체(실시간) 둘 다 받는다 — 결과 승인 방식이 동일하기 때문.
+    // 팝빌 등과 달리 결제수단 이름은 승인 응답의 payMethod로 구분해 메모에만 반영한다.
+    const methodLabel = approveJson.payMethod === 'bank' ? '계좌이체' : '카드결제';
+
     // 결제 기록(tid가 PK라 중복 콜백은 무시됨)과 포인트 적립을 DB 함수 하나로 묶어 처리한다.
     // 적립이 실패하면 결제 기록도 함께 되돌려져서, 콜백을 다시 받았을 때 정상 적립된다.
     const { error: creditErr } = await supabaseAdmin.rpc('credit_card_payment', {
@@ -59,7 +63,7 @@ router.post('/return', express.urlencoded({ extended: true }), async (req, res) 
       p_order_id: orderId,
       p_owner_id: ownerId,
       p_amount: Number(amount),
-      p_memo: `나이스페이 카드결제 (${String(tid).slice(0, 12)}...)`,
+      p_memo: `나이스페이 ${methodLabel} (${String(tid).slice(0, 12)}...)`,
     });
     if (creditErr) throw creditErr;
 

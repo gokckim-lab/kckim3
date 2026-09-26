@@ -35,7 +35,12 @@ export interface BuyerInfo {
   buyerEmail?: string;
 }
 
-export async function requestNicePayCharge(
+// 카드결제와 계좌이체(실시간)는 둘 다 결제창에서 인증이 끝나면 나이스페이가 즉시
+// backend의 /api/payments/nicepay/return 으로 결과를 넘겨주고, 거기서 서버가 승인+포인트
+// 적립까지 한 번에 끝낸다(가상계좌처럼 별도 웹훅을 기다릴 필요가 없다). 그래서 둘 다 같은
+// 처리 로직을 공유하고 method 값만 다르다.
+async function requestNicePayInstant(
+  method: 'card' | 'bank',
   amount: number,
   userId: string,
   onError: (message: string) => void,
@@ -51,7 +56,7 @@ export async function requestNicePayCharge(
   const AUTHNICE = await loadNicePaySdk();
   AUTHNICE.requestPay({
     clientId,
-    method: 'card',
+    method,
     orderId: generateOrderId(userId),
     amount,
     goodsName: `Birdie Bill 포인트 충전 ${amount.toLocaleString('ko-KR')}원`,
@@ -61,6 +66,25 @@ export async function requestNicePayCharge(
       onError(result?.msg || result?.errorMsg || '결제창 오류가 발생했습니다.');
     },
   });
+}
+
+export async function requestNicePayCharge(
+  amount: number,
+  userId: string,
+  onError: (message: string) => void,
+  buyer?: BuyerInfo
+) {
+  return requestNicePayInstant('card', amount, userId, onError, buyer);
+}
+
+/** 실시간 계좌이체로 충전한다. 카드결제와 동일하게 관리자 확인 없이 즉시 자동 반영된다. */
+export async function requestNicePayBankTransfer(
+  amount: number,
+  userId: string,
+  onError: (message: string) => void,
+  buyer?: BuyerInfo
+) {
+  return requestNicePayInstant('bank', amount, userId, onError, buyer);
 }
 
 /**
