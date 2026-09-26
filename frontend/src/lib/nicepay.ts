@@ -16,6 +16,13 @@ export function generateOrderId(userId: string) {
   return `WALLET-${userId}-${Date.now()}`;
 }
 
+// 가상계좌 콜백(backend/src/routes/nicepayVirtualAccount.js)은 주문번호가 "VA-" 접두사여야만
+// 소유자를 알아낼 수 있다. 카드결제와 같은 generateOrderId("WALLET-...")를 쓰면 그 접두사가 안 맞아
+// "주문번호 형식이 올바르지 않습니다" 에러로 발급 자체가 실패한다.
+export function generateVirtualAccountOrderId(userId: string) {
+  return `VA-${userId}-${Date.now()}`;
+}
+
 /**
  * 나이스페이 결제창을 띄운다. 결제창 인증이 끝나면 나이스페이가 브라우저를
  * backend의 returnUrl(/api/payments/nicepay/return)로 직접 이동시키고,
@@ -80,7 +87,7 @@ export async function requestNicePayVirtualAccount(
   AUTHNICE.requestPay({
     clientId,
     method: 'vbank',
-    orderId: generateOrderId(userId),
+    orderId: generateVirtualAccountOrderId(userId),
     amount,
     goodsName: `Birdie Bill 포인트 충전 ${amount.toLocaleString('ko-KR')}원`,
     vbankHolder,
