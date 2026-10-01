@@ -32,28 +32,30 @@ export default function Navbar() {
 
   return (
     <nav className="bg-slate-900 text-white print:hidden">
-      <div className="max-w-6xl mx-auto px-4 flex items-center h-14 gap-1 overflow-x-auto">
-        <span className="font-bold text-lg mr-4 shrink-0">🐦 Birdie Bill</span>
-        {links.map((l) => (
-          <NavLink
-            key={l.to}
-            to={l.to}
-            className={({ isActive }) =>
-              `px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-800'}`
-            }
-          >
-            {l.label}
-          </NavLink>
-        ))}
-        <div className="ml-auto flex items-center gap-3 text-sm text-slate-300 shrink-0">
+      <div className="max-w-6xl mx-auto px-4 flex items-center h-14 gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto min-w-0 flex-1">
+          <span className="font-bold text-lg mr-4 shrink-0">🐦 Birdie Bill</span>
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-md text-sm whitespace-nowrap shrink-0 ${isActive ? 'bg-slate-700 text-white' : 'text-slate-300 hover:bg-slate-800'}`
+              }
+            >
+              {l.label}
+            </NavLink>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 text-sm text-slate-300 shrink-0 ml-2">
           {user ? (
             <>
-              <span className="text-xs whitespace-nowrap">{user.email}</span>
+              <span className="text-xs whitespace-nowrap hidden sm:inline">{user.email}</span>
               <button onClick={signOut} className="px-3 py-1.5 rounded-md hover:bg-slate-800 whitespace-nowrap">로그아웃</button>
             </>
           ) : (
-            <Link to="/login" className="px-3 py-1.5 rounded-md bg-white text-slate-900 font-medium whitespace-nowrap hover:bg-slate-100">
-              로그인 / 회원가입
+            <Link to="/login?mode=signup" className="px-3 py-1.5 rounded-md bg-white text-slate-900 font-medium whitespace-nowrap hover:bg-slate-100">
+              회원가입
             </Link>
           )}
         </div>

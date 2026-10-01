@@ -8,7 +8,8 @@ export default function Login() {
   const next = params.get('next');
   // 열린 리다이렉트를 막기 위해 같은 사이트 안의 경로만 허용한다.
   const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const initialMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +74,26 @@ export default function Login() {
         </div>
 
       <form onSubmit={submit} className="order-1 md:order-2 bg-white p-8 rounded-2xl shadow-sm border border-slate-200 w-full max-w-sm mx-auto">
-        <h2 className="text-xl font-bold text-slate-800 mb-1">로그인</h2>
+        <div className="flex rounded-lg bg-slate-100 p-1 mb-6" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'signin'}
+            onClick={() => setMode('signin')}
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === 'signin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            로그인
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'signup'}
+            onClick={() => setMode('signup')}
+            className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            회원가입 (처음이신가요?)
+          </button>
+        </div>
         <p className="text-sm text-slate-500 mb-6">견적 · 주문 · 거래명세서 · 세금계산서</p>
 
         <label className="text-xs text-slate-500 flex flex-col gap-1 mb-3">
@@ -107,11 +127,6 @@ export default function Login() {
         <button type="submit" disabled={busy}
           className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium hover:bg-slate-800 disabled:opacity-60">
           {mode === 'signin' ? '로그인' : '회원가입'}
-        </button>
-
-        <button type="button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
-          className="w-full text-xs text-slate-500 mt-3 hover:underline">
-          {mode === 'signin' ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
         </button>
 
         <div className="flex items-center gap-3 my-4">
