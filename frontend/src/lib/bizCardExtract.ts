@@ -40,6 +40,20 @@ export function findLabelValueWithPrevFallback(lines: string[], labelPattern: st
   return '';
 }
 
+// 흐릿한 스캔본은 OCR이 한글 구간 전체를 엉뚱한 영문/기호로 "환각" 인식하기도 한다
+// (예: "청암네트웍스(주)" -> "BLUEIA(F)", "서울특별시" -> "ASSEN"). 그런 값을 그대로 보여주면
+// 오인식된 정보를 사실로 착각하게 되므로, 한글이 하나도 없는 값은 버리는 게 더 안전하다.
+const hasHangul = (s: string) => /[가-힣]/.test(s);
+
+// 값 맨 앞에 그렇게 환각 인식된 영문/기호 토큰이 붙고 그 뒤로는 정상적으로 한글이 이어지는
+// 경우(예: "ASSEN 송파구 송파대로36가길 7(송파동, 702호)")에는, 뒤쪽 한글 부분이라도 살릴 수
+// 있도록 맨 앞의 "한글이 섞이지 않은" 첫 토큰만 잘라낸다.
+function stripLeadingGarbageToken(s: string): string {
+  const tokens = s.split(/\s+/);
+  while (tokens.length > 1 && tokens[0] && !hasHangul(tokens[0])) tokens.shift();
+  return tokens.join(' ').trim();
+}
+
 /** 사업자등록증뿐 아니라 견적서/주문서 등의 "공급자/공급받는자" 정보 블록에도 재사용한다. */
 export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
   if (!rawText || rawText.trim().length < 2) return {};
@@ -72,6 +86,8 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     // 같은 줄 오른쪽에 다른 칸(종사업장 등)이 넓은 공백을 사이에 두고 이어 붙는 경우가 있어,
     // ceo와 마찬가지로 공백 2칸 이상을 열 경계로 보고 그 앞부분만 상호 값으로 쓴다.
     name = name.split(/\s{2,}|\t/)[0].trim();
+    // 상호 전체가 영문/기호로 환각 인식된 경우(한글이 하나도 없음) 오인식 값을 보여주지 않는다.
+    if (!hasHangul(name)) name = '';
 
     let ceo = findLabelValueWithPrevFallback(
       lines,
@@ -80,14 +96,19 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     // 값 뒤에 같은 줄로 다음 항목(생년월일 등)이 넓은 공백을 사이에 두고 이어 붙는 경우가
     // 많아서, 공백 2칸 이상을 열 경계로 보고 그 앞부분만 잘라 쓴다.
     ceo = ceo.replace(/^\([^)]*\)\s*/, '').split(/\s{2,}|\t/)[0].trim();
+    if (!hasHangul(ceo)) ceo = '';
 
     let address = findLabelValueWithPrevFallback(
       lines,
       '사\\s*업\\s*장\\s*소\\s*재\\s*지|소\\s*재\\s*지|본\\s*점\\s*소\\s*재\\s*지'
     );
-    if (!address) {
+    // 라벨 바로 뒤 첫 토큰(보통 시/도 이름)만 환각 인식되고 나머지 주소는 멀쩡한 경우가 있어,
+    // 완전히 버리는 대신 그 선행 토큰만 잘라내고 살릴 수 있는 부분은 살린다.
+    address = stripLeadingGarbageToken(address);
+    if (!address || !hasHangul(address)) {
       const m = normalized.match(/(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]{5,60}/);
       if (m) address = m[0].trim();
+      else if (!hasHangul(address)) address = '';
     }
 
     let bizType = findLabelValueWithPrevFallback(lines, '업\\s*태');
@@ -104,18 +125,31 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     // 흐릿한 사진 스캔본은 "류" 한 글자만 다른 글자로 잘못 읽혀도(예: "종류"→"종2") 정확히 일치하는
     // "사업의종류"를 못 찾으므로, "류"는 있으면 좋고 없어도 되는 정도로만 요구한다.
     if (!bizType || !bizItem) {
-      const bizRow = lines.find((l) => /사\s*업\s*의\s*종\s*류?/.test(l));
+      const bizRowAnchor = /사\s*업\s*의\s*종\s*류?\s*[:：]?\s*/;
+      const bizRow = lines.find((l) => bizRowAnchor.test(l));
       if (bizRow) {
+        // "사업의 종류" 라벨 자체를 떼어내고 나면 두 가지 모양이 남는다:
+        //  1) 체크박스 글자가 깨진 채 남아있는 경우 — "[FH 도매및소매업     [총록| 전자상거래 소매업"
+        //     (업태/종목 값 사이에 넓은 공백이 있고, 각 칸 맨 앞에 깨진 체크박스 토큰이 붙어있다)
+        //  2) 체크박스가 아예 통째로 사라진 경우 — "도소매 컬퓨터및소모품"
+        //     (업태 값과 종목 값 사이에 공백 한 칸만 있어 구분할 표시가 없다. 업태는 항상
+        //      "도매/소매/도소매/서비스/제조업" 같은 짧은 한 단어이므로 첫 단어를 업태로 본다)
+        const stripped = bizRow.replace(bizRowAnchor, '').trim();
+        const segments = stripped.split(/\s{2,}/).map((s) => s.trim()).filter(Boolean);
+        const cols =
+          segments.length >= 2
+            ? segments.map((seg) => seg.split(/\s+/).slice(1).join(' ').trim())
+            : (() => {
+                const parts = stripped.split(/\s+/);
+                return [parts[0] ?? '', parts.slice(1).join(' ')];
+              })();
         // 흐릿한 사진은 라벨/체크박스 자리뿐 아니라 값 자체도 OCR이 알파벳·기호 쓰레기로
         // 뭉개버릴 수 있다(예: "도매및소매업" → "SHYLA"). 한글이 하나도 없는 칸은 사업 종류로
         // 보기 어려우므로 자리는 유지한 채 빈칸으로 둬서(오인식된 값을 채우는 대신) 사용자가
         // 직접 입력하게 한다 — 앞 칸이 쓰레기라고 뒤 칸(종목) 값을 업태 자리로 당겨쓰면 안 된다.
-        const cols = bizRow
-          .split(/\s{2,}/)
-          .map((seg) => seg.trim().split(/\s+/).slice(1).join(' ').trim())
-          .map((v) => (v && /[가-힣]/.test(v) ? v : ''));
-        if (!bizType && cols[0]) bizType = cols[0];
-        if (!bizItem && cols[1]) bizItem = cols[1];
+        const cleaned = cols.map((v) => (v && hasHangul(v) ? v : ''));
+        if (!bizType && cleaned[0]) bizType = cleaned[0];
+        if (!bizItem && cleaned[1]) bizItem = cleaned[1];
       }
     }
 
