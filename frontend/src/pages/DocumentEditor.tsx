@@ -54,6 +54,7 @@ export default function DocumentEditor() {
   const [issuing, setIssuing] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendingSupplierEmail, setResendingSupplierEmail] = useState(false);
   const [revisionCode, setRevisionCode] = useState(1);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
@@ -227,6 +228,21 @@ export default function DocumentEditor() {
     }
   };
 
+  // 공급받는자뿐 아니라 공급자(우리 쪽)에게도 재발송할 수 있어야 한다 — 발행 시 자동발송이
+  // 둘 중 한쪽만 실패하거나(스팸함 등으로) 안 보일 수 있기 때문.
+  const doResendSupplierEmail = async () => {
+    if (!doc) return;
+    setResendingSupplierEmail(true);
+    try {
+      await resendTaxInvoiceEmail(doc.id, supplier.email);
+      notify(`${supplier.email}로 세금계산서 이메일을 재발송했습니다.`, 'success');
+    } catch (e: any) {
+      notify(`이메일 발송 실패: ${e.message}`, 'error');
+    } finally {
+      setResendingSupplierEmail(false);
+    }
+  };
+
   // 발행취소: 팝빌이 국세청 전송 전인지 스스로 판단해 처리한다. 이미 전송된 건은 팝빌이
   // 에러를 돌려주므로, 그때는 "수정세금계산서"로 안내한다.
   const doCancel = async () => {
@@ -322,7 +338,14 @@ export default function DocumentEditor() {
             <button onClick={doResendEmail} disabled={resendingEmail || !customer.email}
               title={!customer.email ? '공급받는자 이메일을 먼저 입력해주세요.' : undefined}
               className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-60">
-              {resendingEmail ? '발송 중...' : '이메일 재발송'}
+              {resendingEmail ? '발송 중...' : '공급받는자에게 재발송'}
+            </button>
+          )}
+          {isTaxInvoice && issued && (
+            <button onClick={doResendSupplierEmail} disabled={resendingSupplierEmail || !supplier.email}
+              title={!supplier.email ? '공급자 이메일을 먼저 입력해주세요.' : undefined}
+              className="px-4 py-2 text-sm border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-60">
+              {resendingSupplierEmail ? '발송 중...' : '공급자에게 재발송'}
             </button>
           )}
           {isTaxInvoice && issued && (
