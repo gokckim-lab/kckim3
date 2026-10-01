@@ -3,7 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
-  const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle, resendConfirmation } = useAuth();
   const [params] = useSearchParams();
   const next = params.get('next');
   // 열린 리다이렉트를 막기 위해 같은 사이트 안의 경로만 허용한다.
@@ -17,6 +17,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [resendBusy, setResendBusy] = useState(false);
 
   if (user) return <Navigate to={safeNext} replace />;
 
@@ -34,6 +35,15 @@ export default function Login() {
     setBusy(false);
     if (error) setError(error);
     else if (mode === 'signup') setInfo('가입 완료! 이메일 인증이 필요할 수 있습니다. 로그인해주세요.');
+  };
+
+  const handleResend = async () => {
+    setResendBusy(true);
+    setError(null);
+    const { error } = await resendConfirmation(email);
+    setResendBusy(false);
+    if (error) setError(error);
+    else setInfo('인증 메일을 다시 보냈습니다. 받은편지함(스팸함 포함)을 확인해주세요.');
   };
 
   const handleGoogle = async () => {
@@ -121,7 +131,21 @@ export default function Login() {
             세금계산서 발행은 가입 후 이용할 수 있습니다. 작성 중인 문서는 로그인하면 내 계정으로 자동 이전됩니다.
           </div>
         )}
-        {error && <div className="text-sm text-rose-600 mb-3">{error}</div>}
+        {error && (
+          <div className="text-sm text-rose-600 mb-3">
+            {error}
+            {error.includes('이메일 인증이 완료되지 않았습니다') && (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendBusy || !email}
+                className="block mt-1 text-xs text-rose-700 underline disabled:opacity-60"
+              >
+                {resendBusy ? '보내는 중...' : '인증 메일 다시 보내기'}
+              </button>
+            )}
+          </div>
+        )}
         {info && <div className="text-sm text-emerald-600 mb-3">{info}</div>}
 
         <button type="submit" disabled={busy}
