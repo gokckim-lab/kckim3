@@ -69,6 +69,9 @@ export function parseBusinessCardText(rawText: string): Partial<PartyInfo> {
     }
     // "버디 (법인명)" 처럼 라벨 잔재가 값 앞에 남는 경우를 대비해 선행 괄호 라벨을 한 번 더 제거
     name = name.replace(/^\(?(?:법인명|단체명)\)?\s*/, '').trim();
+    // 같은 줄 오른쪽에 다른 칸(종사업장 등)이 넓은 공백을 사이에 두고 이어 붙는 경우가 있어,
+    // ceo와 마찬가지로 공백 2칸 이상을 열 경계로 보고 그 앞부분만 상호 값으로 쓴다.
+    name = name.split(/\s{2,}|\t/)[0].trim();
 
     let ceo = findLabelValueWithPrevFallback(
       lines,
