@@ -49,8 +49,8 @@ export default function Products() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 grid grid-cols-3 gap-6">
-      <div className="col-span-1 bg-white rounded-xl border border-slate-200 p-4 h-fit">
+    <div className="max-w-4xl mx-auto p-4 md:p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 h-fit">
         <h3 className="font-semibold text-slate-800 mb-3">{editingId ? '품목 수정' : '새 품목'}</h3>
         <label className="text-xs text-slate-500 flex flex-col gap-1 mb-2">품목명
           <input className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={draft.name}
@@ -83,7 +83,7 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="col-span-2">
+      <div className="md:col-span-2">
         <h1 className="text-xl font-bold text-slate-800 mb-1">품목 목록</h1>
         <p className="text-xs text-slate-400 mb-3">문서 작성 시 품목명을 입력하면 여기 등록된 품목이 검색되어 규격·단가가 자동으로 채워집니다. 세금계산서를 발행하면 새 품목은 자동으로 저장됩니다.</p>
         {user && <ExcelTools kind="products" ownerId={user.id} existing={list} onDone={load} />}

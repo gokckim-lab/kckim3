@@ -59,8 +59,8 @@ export default function Customers() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 grid grid-cols-3 gap-6">
-      <div className="col-span-1 bg-white rounded-xl border border-slate-200 p-4 h-fit">
+    <div className="max-w-5xl mx-auto p-4 md:p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-4 h-fit">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-slate-800">{editingId ? '거래처 수정' : '새 거래처'}</h3>
           <BizCardUpload label="거래처" onExtracted={(f) => setDraft({
@@ -91,7 +91,7 @@ export default function Customers() {
         </div>
       </div>
 
-      <div className="col-span-2">
+      <div className="md:col-span-2">
         <div className="flex items-center justify-between gap-3 mb-3">
           <h1 className="text-xl font-bold text-slate-800">거래처 목록 <span className="text-sm font-normal text-slate-400">{list.length}곳</span></h1>
           <input className="border border-slate-300 rounded-md px-3 py-1.5 text-sm w-64" placeholder="상호·사업자번호·대표자 검색"

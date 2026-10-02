@@ -25,11 +25,11 @@ export default function PartyForm({ title, value, onChange, showTaxOptions }: Pr
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-slate-800">{title}</h3>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h3 className="font-semibold text-slate-800 whitespace-nowrap shrink-0">{title}</h3>
         <BizCardUpload label={title} onExtracted={(fields) => onChange({ ...value, ...fields })} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {FIELD.map((f) => (
           <label key={f.key} className="text-xs text-slate-500 flex flex-col gap-1">
             {f.label}

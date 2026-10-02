@@ -417,7 +417,7 @@ export default function DocumentEditor() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 print:hidden">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:hidden">
         <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
           <label className="text-xs text-slate-500 flex flex-col gap-1">
             거래처 선택 (등록된 거래처에서 불러오기)
@@ -441,7 +441,7 @@ export default function DocumentEditor() {
         </label>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 print:hidden">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 print:hidden">
         <PartyForm title="공급자" value={supplier} onChange={setSupplier} />
         <PartyForm title="공급받는자" value={customer} onChange={setCustomer} showTaxOptions={isTaxInvoice} />
       </div>
