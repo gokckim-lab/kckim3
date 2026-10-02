@@ -7,7 +7,9 @@ import ItemTable from '../components/ItemTable';
 import PrintableDocument from '../components/PrintableDocument';
 import OrderDocUpload from '../components/OrderDocUpload';
 import GuestBanner from '../components/GuestBanner';
-import { fetchCustomers } from '../lib/customers';
+import CustomerPicker from '../components/CustomerPicker';
+import { fetchCustomers, fetchRecentCustomerIds, sortByRecent } from '../lib/customers';
+import { fetchProducts } from '../lib/products';
 import { fetchProfile } from '../lib/profile';
 import { NEXT_TYPE } from '../lib/documents';
 import { getDocStore } from '../lib/docStore';
@@ -15,7 +17,7 @@ import { loadGuestSupplier, saveGuestSupplier } from '../lib/guestStore';
 import { issueTaxInvoice, getTaxInvoicePopupUrl, resendTaxInvoiceEmail, cancelTaxInvoice } from '../lib/backendApi';
 import { fetchMyWallet } from '../lib/wallet';
 import type { OrderDocResult } from '../lib/orderDocExtract';
-import type { CustomerRecord, DocType, DocumentItem, DocumentRecord, PartyInfo } from '../types';
+import type { CustomerRecord, DocType, DocumentItem, DocumentRecord, PartyInfo, ProductRecord } from '../types';
 import { DOC_TYPE_LABEL, emptyParty, MODIFY_CODE_LABEL } from '../types';
 
 // toISOString()은 UTC 기준이라 한국 시간 새벽(0~9시)에는 작성일이 하루 전으로 찍힌다.
@@ -25,6 +27,12 @@ const todayLocal = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+// DB에 NULL로 남은 칸을 그대로 넘기면 입력칸이 이전 거래처 값을 유지하므로(예: 다른 거래처 이메일로 발행) 빈 문자열로 바꾼다.
+const customerToParty = (c: CustomerRecord): PartyInfo => ({
+  bizNo: c.biz_no ?? '', name: c.name ?? '', ceo: c.ceo ?? '', address: c.address ?? '', bizType: c.biz_type ?? '',
+  bizItem: c.biz_item ?? '', email: c.email ?? '', tel: c.tel ?? '', contact: c.contact ?? '', purposeType: '영수', taxType: '과세',
+});
+
 export default function DocumentEditor() {
   const { type, id } = useParams<{ type: DocType; id: string }>();
   const [params] = useSearchParams();
@@ -33,6 +41,7 @@ export default function DocumentEditor() {
   // sourceId(내용 복사용)와 함께 넘겨준다. reviseId=원본 문서 id, modifyCode=수정사유(1~6).
   const reviseId = params.get('reviseId');
   const reviseModifyCode = params.get('modifyCode');
+  const presetCustomerId = params.get('customerId');
   const navigate = useNavigate();
   const { user } = useAuth();
   const notify = useToast();
@@ -49,6 +58,7 @@ export default function DocumentEditor() {
   const [dueDate, setDueDate] = useState('');
   const [memo, setMemo] = useState('');
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [products, setProducts] = useState<ProductRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -60,7 +70,10 @@ export default function DocumentEditor() {
 
   useEffect(() => {
     if (!user) return;
-    fetchCustomers().then(setCustomers).catch(() => {});
+    Promise.all([fetchCustomers(), fetchRecentCustomerIds().catch(() => [])])
+      .then(([list, recent]) => setCustomers(sortByRecent(list, recent)))
+      .catch(() => {});
+    fetchProducts().then(setProducts).catch(() => {});
   }, [user?.id]);
 
   useEffect(() => {
@@ -101,7 +114,9 @@ export default function DocumentEditor() {
           setMemo(src.memo);
         } else {
           setSupplier(user ? await fetchProfile(user.id) : loadGuestSupplier());
-          setCustomer(emptyParty());
+          const preset = presetCustomerId && user ? (await fetchCustomers()).find((c) => c.id === presetCustomerId) : undefined;
+          setCustomer(preset ? customerToParty(preset) : emptyParty());
+          setCustomerId(preset?.id ?? null);
         }
       } catch (e: any) {
         notify(e.message, 'error');
@@ -109,7 +124,7 @@ export default function DocumentEditor() {
         setLoading(false);
       }
     })();
-  }, [type, id, sourceId, user?.id]);
+  }, [type, id, sourceId, presetCustomerId, user?.id]);
 
   useEffect(() => {
     if (type === 'tax_invoice' && user) {
@@ -120,12 +135,7 @@ export default function DocumentEditor() {
   const pickCustomer = (cid: string) => {
     setCustomerId(cid || null);
     const c = customers.find((x) => x.id === cid);
-    if (c) {
-      setCustomer({
-        bizNo: c.biz_no, name: c.name, ceo: c.ceo, address: c.address, bizType: c.biz_type,
-        bizItem: c.biz_item, email: c.email, tel: c.tel, contact: c.contact, purposeType: '영수', taxType: '과세',
-      });
-    }
+    if (c) setCustomer(customerToParty(c));
   };
 
   const handleOrderDocImport = (result: OrderDocResult) => {
@@ -299,7 +309,7 @@ export default function DocumentEditor() {
   const insufficientBalance = isTaxInvoice && walletBalance !== null && walletBalance < issuePrice;
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-4">
+    <div className="max-w-6xl mx-auto p-6 space-y-4">
       <GuestBanner />
       <div className="flex items-center justify-between print:hidden">
         <div>
@@ -322,7 +332,7 @@ export default function DocumentEditor() {
             <button onClick={doIssue} disabled={issuing || insufficientBalance}
               title={insufficientBalance ? '포인트 잔액이 부족합니다. 포인트 메뉴에서 충전해주세요.' : undefined}
               className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:opacity-60">
-              {issuing ? '발행 중...' : insufficientBalance ? '포인트 부족' : '팝빌로 세금계산서 발행'}
+              {issuing ? '발행 중...' : insufficientBalance ? '포인트 부족' : '버디빌로 세금계산서 발행'}
             </button>
           )}
           {isTaxInvoice && !user && (
@@ -373,7 +383,7 @@ export default function DocumentEditor() {
 
       {doc?.popbill_status === 'FAILED' && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-md p-3 print:hidden">
-          팝빌 발행 실패: {doc.popbill_last_error}
+          세금계산서 발행 실패: {doc.popbill_last_error}
         </div>
       )}
 
@@ -411,11 +421,7 @@ export default function DocumentEditor() {
         <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">
           <label className="text-xs text-slate-500 flex flex-col gap-1">
             거래처 선택 (등록된 거래처에서 불러오기)
-            <select className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={customerId ?? ''}
-              onChange={(e) => pickCustomer(e.target.value)} disabled={issued}>
-              <option value="">-- 직접 입력 --</option>
-              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <CustomerPicker customers={customers} selectedId={customerId} onPick={pickCustomer} disabled={issued} />
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs text-slate-500 flex flex-col gap-1">작성일
@@ -441,7 +447,7 @@ export default function DocumentEditor() {
       </div>
 
       <div className="print:hidden">
-        <ItemTable items={items} onChange={setItems} taxType={customer.taxType} readOnly={issued} />
+        <ItemTable items={items} onChange={setItems} taxType={customer.taxType} readOnly={issued} products={products} />
       </div>
 
       {doc && (

@@ -2,6 +2,7 @@ const express = require('express');
 const { popbill, taxinvoiceService } = require('../popbillClient');
 const { supabaseAdmin } = require('../supabaseAdmin');
 const { requireAuth } = require('../requireAuth');
+const { sendMail, escapeHtml } = require('../mailer');
 
 const router = express.Router();
 const CORP_NUM = process.env.POPBILL_CORP_NUM;
@@ -12,21 +13,119 @@ const ISSUE_PRICE = Number(process.env.POPBILL_ISSUE_PRICE || 200);
 
 const onlyDigits = (v) => String(v || '').replace(/\D/g, '');
 
-// 발행 완료 후 이메일로 세금계산서 발송 (실패해도 발행 자체는 이미 끝난 상태이므로 예외를 던지지 않는다)
-// 팝빌 sendEmail은 한 번에 수신자 한 명만 받으므로, 공급자/공급받는자에게 각각 보내려면 두 번 호출해야 한다.
-function sendTaxinvoiceEmail(mgtKey, receiver) {
-  return new Promise((resolve) => {
-    if (!receiver) return resolve({ sent: false, reason: '이메일이 입력되지 않았습니다.' });
-    taxinvoiceService.sendEmail(
-      CORP_NUM,
-      popbill.MgtKeyType.SELL,
-      mgtKey,
-      receiver,
-      USER_ID,
-      () => resolve({ sent: true }),
-      (err) => resolve({ sent: false, reason: `[${err.code}] ${err.message}` })
+const issueMailSubject = (supplierName) => `[버디빌] ${supplierName}에서 전자세금계산서가 발행되었습니다`;
+const won = (n) => `${Number(n || 0).toLocaleString('ko-KR')}원`;
+
+function getMailURL(mgtKey) {
+  return new Promise((resolve, reject) => {
+    taxinvoiceService.getMailURL(CORP_NUM, popbill.MgtKeyType.SELL, mgtKey, USER_ID, resolve, (err) =>
+      reject(new Error(`[${err.code}] ${err.message}`))
     );
   });
+}
+
+// 팝빌 sendEmail(재전송)은 제목을 지정할 수 없어 팝빌 기본 양식으로 나가므로, 재발송과 공급자 사본은 버디빌 발신으로 직접 보낸다.
+async function sendBrandedTaxinvoiceEmail(doc, receiver, { toSupplier = false } = {}) {
+  if (!receiver) return { sent: false, reason: `${toSupplier ? '공급자' : '공급받는자'} 이메일이 입력되지 않았습니다.` };
+  try {
+    const supplier = doc.supplier || {};
+    const customer = doc.customer || {};
+    const supplierName = supplier.name || '공급자';
+    const customerName = customer.name || '공급받는자';
+    const heading = toSupplier
+      ? `${customerName}에 전자세금계산서를 발행했습니다`
+      : `${supplierName}에서 전자세금계산서를 발행했습니다`;
+    const subject = toSupplier ? `[버디빌] ${heading} (공급자 보관용)` : issueMailSubject(supplierName);
+    const footer = toSupplier
+      ? '이 메일은 버디빌(birdiebill.co.kr)에서 발행한 세금계산서의 공급자 보관용 사본입니다.'
+      : `이 메일은 버디빌(birdiebill.co.kr)을 통해 발송되었습니다. 문의는 이 메일에 회신하시면 ${supplierName}에 전달됩니다.`;
+    const viewUrl = await getMailURL(doc.doc_no);
+    const rows = [
+      ['공급자', supplierName],
+      ['공급받는자', customer.name || ''],
+      ['작성일자', doc.issue_date || ''],
+      ['공급가액', won(doc.supply_total)],
+      ['세액', won(doc.tax_total)],
+      ['합계금액', won(doc.grand_total)],
+      ['국세청 승인번호', doc.popbill_nts_confirm_num || ''],
+    ];
+    const html = `<div style="font-family:'Malgun Gothic',sans-serif;max-width:560px;margin:0 auto;color:#0f172a">
+<h2 style="margin:0 0 16px">${escapeHtml(heading)}</h2>
+<table style="border-collapse:collapse;width:100%;font-size:14px">${rows
+      .map(([k, v]) => `<tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;color:#64748b;width:130px">${k}</td><td style="padding:8px;border-bottom:1px solid #e2e8f0">${escapeHtml(v)}</td></tr>`)
+      .join('')}</table>
+<p style="margin:24px 0"><a href="${escapeHtml(viewUrl)}" style="background:#0f172a;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none">세금계산서 보기</a></p>
+<p style="font-size:12px;color:#94a3b8">${escapeHtml(footer)}</p>
+</div>`;
+    const text = `${heading}.\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n\n세금계산서 보기: ${viewUrl}\n\n${footer}`;
+    await sendMail({ to: receiver, subject, html, text, replyTo: toSupplier ? undefined : supplier.email });
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: err.message };
+  }
+}
+
+// 발행 성공한 세금계산서의 공급받는자를 거래처 목록에 저장한다. 사업자번호(없으면 상호)로 기존 거래처를 찾고,
+// 이미 있으면 사용자가 정리해둔 값을 덮어쓰지 않도록 빈 칸만 채운다.
+async function saveCustomerFromInvoice(doc) {
+  const c = doc.customer || {};
+  const name = (c.name || '').trim();
+  if (!name) return;
+  const fields = {
+    biz_no: c.bizNo || '', name, ceo: c.ceo || '', address: c.address || '', biz_type: c.bizType || '',
+    biz_item: c.bizItem || '', email: c.email || '', tel: c.tel || '', contact: c.contact || '',
+  };
+
+  const { data: list, error } = await supabaseAdmin.from('customers').select('*').eq('owner_id', doc.owner_id);
+  if (error) throw error;
+  const bizNo = onlyDigits(fields.biz_no);
+  const existing =
+    list.find((x) => x.id === doc.customer_id) ||
+    (bizNo.length === 10
+      ? list.find((x) => onlyDigits(x.biz_no) === bizNo)
+      : list.find((x) => !onlyDigits(x.biz_no) && x.name.trim() === name));
+
+  let customerId;
+  if (existing) {
+    customerId = existing.id;
+    const patch = Object.fromEntries(Object.entries(fields).filter(([k, v]) => v && !String(existing[k] || '').trim()));
+    if (Object.keys(patch).length) {
+      const { error: upErr } = await supabaseAdmin.from('customers').update(patch).eq('id', existing.id);
+      if (upErr) throw upErr;
+    }
+  } else {
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from('customers')
+      .insert({ ...fields, owner_id: doc.owner_id })
+      .select('id')
+      .single();
+    if (insErr) throw insErr;
+    customerId = created.id;
+  }
+
+  if (doc.customer_id !== customerId) {
+    await supabaseAdmin.from('documents').update({ customer_id: customerId }).eq('id', doc.id);
+  }
+}
+
+// 발행한 세금계산서의 품목을 품목 목록에 저장한다. 품목명+규격이 같으면 이미 있는 것으로 보고 건드리지 않는다
+// (단가는 거래처마다 다를 수 있어 처음 등록할 때의 값만 넣는다).
+async function saveProductsFromInvoice(doc) {
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  const { data: existing, error } = await supabaseAdmin.from('products').select('name, spec').eq('owner_id', doc.owner_id);
+  if (error) throw error;
+  const known = new Set(existing.map((p) => `${norm(p.name)}|${norm(p.spec)}`));
+  const rows = [];
+  for (const it of doc.document_items || []) {
+    const key = `${norm(it.name)}|${norm(it.spec)}`;
+    if (!norm(it.name) || known.has(key)) continue;
+    known.add(key);
+    rows.push({ owner_id: doc.owner_id, name: it.name.trim(), spec: (it.spec || '').trim(), unit: '', unit_price: Number(it.unit_price) || 0, memo: '' });
+  }
+  if (rows.length) {
+    const { error: insErr } = await supabaseAdmin.from('products').insert(rows);
+    if (insErr) throw insErr;
+  }
 }
 
 // 팝빌 포인트 잔액 조회
@@ -100,7 +199,8 @@ function buildTaxinvoice(doc, items, orgNTSConfirmNum) {
       unitCost: String(it.unit_price ?? ''),
       supplyCost: String(it.supply_price ?? ''),
       tax: String(it.tax ?? ''),
-      remark: it.remark || '',
+      // 품목별 비고칸은 화면에서 없앴으므로, PDF 불러오기 등으로 남아 있는 보이지 않는 값이 국세청에 가지 않게 비운다.
+      remark: '',
     })),
   };
 
@@ -170,15 +270,17 @@ router.post('/issue', requireAuth, async (req, res) => {
 
   const taxinvoice = buildTaxinvoice(doc, doc.document_items, orgNTSConfirmNum);
 
-  const supplierName = (doc.supplier || {}).name || 'Birdie Bill';
+  const supplierName = (doc.supplier || {}).name || '공급자';
+  const receiver = (doc.customer || {}).email;
 
+  // 공급받는자 발행안내 메일은 팝빌이 invoiceeEmail1로 자동 발송하며 끌 수 없다(법정 전송). 제목만 버디빌로 지정한다.
   taxinvoiceService.registIssue(
     CORP_NUM,
     taxinvoice,
     false, // writeSpecification
     true, // forceIssue: 발행 유예/보류 거래처라도 강제 발행
     '', // memo
-    `[${supplierName}] 전자세금계산서가 발행되었습니다`, // emailSubject
+    issueMailSubject(supplierName),
     '', // dealInvoiceMgtKey
     USER_ID,
     async (result) => {
@@ -193,12 +295,16 @@ router.post('/issue', requireAuth, async (req, res) => {
         })
         .eq('id', documentId);
 
-      // 공급받는자·공급자 양쪽에 세금계산서 이메일 자동 발송. 실패해도 발행 자체는 이미 성공했으므로
-      // 응답의 emailSent/supplierEmailSent 값으로만 알리고, 발행 응답 자체를 실패로 바꾸지 않는다.
-      const [emailResult, supplierEmailResult] = await Promise.all([
-        sendTaxinvoiceEmail(doc.doc_no, (doc.customer || {}).email),
-        sendTaxinvoiceEmail(doc.doc_no, (doc.supplier || {}).email),
-      ]);
+      // 팝빌 공급자 발행알림(TAX_ISSUE_INVOICER)은 꺼져 있고 켜도 팝빌 양식이라, 공급자 사본은 버디빌이 직접 보낸다.
+      const supplierMail = await sendBrandedTaxinvoiceEmail(
+        { ...doc, popbill_nts_confirm_num: ntsConfirmNum },
+        (doc.supplier || {}).email,
+        { toSupplier: true }
+      );
+      if (!supplierMail.sent) console.error('[supplier-mail]', doc.doc_no, supplierMail.reason);
+
+      await saveCustomerFromInvoice(doc).catch((e) => console.error('[auto-customer]', doc.doc_no, e.message));
+      await saveProductsFromInvoice(doc).catch((e) => console.error('[auto-product]', doc.doc_no, e.message));
 
       res.json({
         ok: true,
@@ -206,10 +312,10 @@ router.post('/issue', requireAuth, async (req, res) => {
         code: result.code,
         message: result.message,
         walletBalance: newBalance,
-        emailSent: emailResult.sent,
-        emailError: emailResult.sent ? undefined : emailResult.reason,
-        supplierEmailSent: supplierEmailResult.sent,
-        supplierEmailError: supplierEmailResult.sent ? undefined : supplierEmailResult.reason,
+        emailSent: !!receiver,
+        emailError: receiver ? undefined : '공급받는자 이메일이 입력되지 않았습니다.',
+        supplierEmailSent: supplierMail.sent,
+        supplierEmailError: supplierMail.sent ? undefined : supplierMail.reason,
       });
     },
     async (err) => {
@@ -272,7 +378,7 @@ router.post('/:documentId/resend-email', requireAuth, async (req, res) => {
 
   const { data: doc } = await supabaseAdmin
     .from('documents')
-    .select('doc_no, popbill_status, created_by, customer')
+    .select('doc_no, popbill_status, popbill_nts_confirm_num, created_by, supplier, customer, issue_date, supply_total, tax_total, grand_total')
     .eq('id', documentId)
     .single();
 
@@ -280,7 +386,8 @@ router.post('/:documentId/resend-email', requireAuth, async (req, res) => {
   if (doc.popbill_status !== 'ISSUED') return res.status(409).json({ error: '아직 발행되지 않았습니다.' });
 
   const receiver = email || (doc.customer || {}).email;
-  const result = await sendTaxinvoiceEmail(doc.doc_no, receiver);
+  const toSupplier = !!receiver && receiver.trim().toLowerCase() === String((doc.supplier || {}).email || '').trim().toLowerCase();
+  const result = await sendBrandedTaxinvoiceEmail(doc, receiver, { toSupplier });
   if (!result.sent) return res.status(400).json({ error: result.reason || '이메일 발송에 실패했습니다.' });
   res.json({ ok: true });
 });

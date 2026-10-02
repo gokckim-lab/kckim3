@@ -20,6 +20,8 @@ import Contact from './pages/Contact';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import Footer from './components/Footer';
+import AccountRecovery from './pages/AccountRecovery';
+import ResetPassword from './pages/ResetPassword';
 
 function Shell() {
   const { user, loading } = useAuth();
@@ -52,6 +54,8 @@ function Shell() {
         <Route path="/login" element={<Login />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/find-account" element={<AccountRecovery />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={<Navigate to="/documents/quote" replace />} />
         <Route path="/profile" element={<ProtectedRoute><CompanyProfile /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />

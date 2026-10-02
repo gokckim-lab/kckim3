@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fetchProfile, saveProfile, type CompanyProfile as CompanyProfileType } from '../lib/profile';
 import { deleteAccount } from '../lib/backendApi';
+import { supabase } from '../lib/supabaseClient';
 import PartyForm from '../components/PartyForm';
 import { emptyParty } from '../types';
 
@@ -82,6 +83,8 @@ export default function CompanyProfile() {
         {saving ? '저장 중...' : '저장'}
       </button>
 
+      <PasswordChange />
+
       <div className="bg-white rounded-xl border border-rose-200 p-4 mt-8">
         <h3 className="font-semibold text-rose-700 mb-1">회원탈퇴</h3>
         <p className="text-xs text-slate-500 mb-3">
@@ -93,6 +96,57 @@ export default function CompanyProfile() {
           {deleting ? '처리 중...' : '회원탈퇴'}
         </button>
       </div>
+    </div>
+  );
+}
+
+function PasswordChange() {
+  const { user } = useAuth();
+  const notify = useToast();
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const providers: string[] = user?.app_metadata?.providers ?? [user?.app_metadata?.provider ?? ''];
+  const passwordLogin = providers.includes('email');
+
+  const submit = async () => {
+    if (password.length < 6) return notify('비밀번호는 6자 이상이어야 합니다.', 'warning');
+    if (password !== confirm) return notify('두 비밀번호가 서로 다릅니다.', 'warning');
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) return notify(error.message, 'error');
+    setPassword('');
+    setConfirm('');
+    notify('비밀번호를 변경했습니다. 다음 로그인부터 새 비밀번호를 사용하세요.', 'success');
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-4 mt-8">
+      <h3 className="font-semibold text-slate-800 mb-1">비밀번호 변경</h3>
+      {!passwordLogin ? (
+        <p className="text-xs text-slate-500">구글 계정으로 로그인하는 계정이라 별도의 비밀번호가 없습니다. 비밀번호는 구글 계정에서 관리됩니다.</p>
+      ) : (
+        <>
+          <p className="text-xs text-slate-500 mb-3">로그인 아이디: {user?.email}</p>
+          <div className="grid grid-cols-2 gap-3 max-w-md mb-3">
+            <label className="text-xs text-slate-500 flex flex-col gap-1">
+              새 비밀번호 (6자 이상)
+              <input type="password" className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={password}
+                onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <label className="text-xs text-slate-500 flex flex-col gap-1">
+              새 비밀번호 확인
+              <input type="password" className="border border-slate-300 rounded-md px-2 py-1.5 text-sm" value={confirm}
+                onChange={(e) => setConfirm(e.target.value)} />
+            </label>
+          </div>
+          <button onClick={submit} disabled={busy}
+            className="border border-slate-300 px-4 py-2 rounded-md text-sm hover:bg-slate-50 disabled:opacity-60">
+            {busy ? '변경 중...' : '비밀번호 변경'}
+          </button>
+        </>
+      )}
     </div>
   );
 }

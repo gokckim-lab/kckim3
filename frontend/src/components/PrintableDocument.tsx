@@ -25,25 +25,23 @@ export default function PrintableDocument({ doc }: { doc: DocumentRecord }) {
       <table className="w-full text-sm border-t-2 border-slate-800 mb-4">
         <thead>
           <tr className="border-b border-slate-300 text-slate-600">
-            <th className="py-2 text-left">품목</th>
-            <th className="py-2 text-left">규격</th>
-            <th className="py-2 text-right">수량</th>
-            <th className="py-2 text-right">단가</th>
-            <th className="py-2 text-right">공급가액</th>
-            <th className="py-2 text-right">세액</th>
-            <th className="py-2 text-left">비고</th>
+            <th className="py-2 px-2 text-left">품목</th>
+            <th className="py-2 px-2 text-left">규격</th>
+            <th className="py-2 px-2 text-right">수량</th>
+            <th className="py-2 px-2 text-right">단가</th>
+            <th className="py-2 px-2 text-right">공급가액</th>
+            <th className="py-2 px-2 text-right">세액</th>
           </tr>
         </thead>
         <tbody>
           {items.map((it, idx) => (
             <tr key={idx} className="border-b border-slate-100">
-              <td className="py-1.5">{it.name}</td>
-              <td className="py-1.5">{it.spec}</td>
-              <td className="py-1.5 text-right">{it.qty}</td>
-              <td className="py-1.5 text-right">{it.unit_price.toLocaleString('ko-KR')}</td>
-              <td className="py-1.5 text-right">{it.supply_price.toLocaleString('ko-KR')}</td>
-              <td className="py-1.5 text-right">{it.tax.toLocaleString('ko-KR')}</td>
-              <td className="py-1.5">{it.remark}</td>
+              <td className="py-1.5 px-2">{it.name}</td>
+              <td className="py-1.5 px-2">{it.spec}</td>
+              <td className="py-1.5 px-2 text-right">{it.qty}</td>
+              <td className="py-1.5 px-2 text-right">{it.unit_price.toLocaleString('ko-KR')}</td>
+              <td className="py-1.5 px-2 text-right">{it.supply_price.toLocaleString('ko-KR')}</td>
+              <td className="py-1.5 px-2 text-right">{it.tax.toLocaleString('ko-KR')}</td>
             </tr>
           ))}
         </tbody>
@@ -69,7 +67,7 @@ export default function PrintableDocument({ doc }: { doc: DocumentRecord }) {
         <div className="mt-4 text-xs text-slate-400">
           {doc.popbill_status === 'ISSUED'
             ? `국세청 승인번호: ${doc.popbill_nts_confirm_num ?? '-'} · 발행일시: ${doc.popbill_issued_at ? new Date(doc.popbill_issued_at).toLocaleString('ko-KR') : '-'}`
-            : '※ 팝빌을 통해 발행되지 않은 임시 미리보기입니다.'}
+            : '※ 아직 발행되지 않은 임시 미리보기입니다.'}
         </div>
       )}
     </div>

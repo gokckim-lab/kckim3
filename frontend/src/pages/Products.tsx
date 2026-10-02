@@ -83,7 +83,8 @@ export default function Products() {
       </div>
 
       <div className="col-span-2">
-        <h1 className="text-xl font-bold text-slate-800 mb-3">품목 목록</h1>
+        <h1 className="text-xl font-bold text-slate-800 mb-1">품목 목록</h1>
+        <p className="text-xs text-slate-400 mb-3">문서 작성 시 품목명을 입력하면 여기 등록된 품목이 검색되어 규격·단가가 자동으로 채워집니다. 세금계산서를 발행하면 새 품목은 자동으로 저장됩니다.</p>
         {loading ? <div className="text-slate-400 text-sm">불러오는 중...</div> : (
           <div className="space-y-2">
             {list.length === 0 && <div className="text-slate-400 text-sm">등록된 품목이 없습니다.</div>}

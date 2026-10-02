@@ -8,10 +8,10 @@ export default function Login() {
   const next = params.get('next');
   // 열린 리다이렉트를 막기 위해 같은 사이트 안의 경로만 허용한다.
   const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
-  const initialMode = params.get('mode') === 'signup' ? 'signup' : 'signin';
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const [mode, setModeState] = useState<'signin' | 'signup'>(params.get('mode') === 'signup' ? 'signup' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -21,8 +21,19 @@ export default function Login() {
 
   if (user) return <Navigate to={safeNext} replace />;
 
+  const setMode = (m: 'signin' | 'signup') => {
+    setModeState(m);
+    setError(null);
+    setInfo(null);
+    setPasswordConfirm('');
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (mode === 'signup' && password !== passwordConfirm) {
+      setError('비밀번호와 비밀번호 확인이 서로 다릅니다.');
+      return;
+    }
     if (mode === 'signup' && !agreed) {
       setError('이용약관과 개인정보처리방침에 동의해주세요.');
       return;
@@ -34,7 +45,11 @@ export default function Login() {
     const { error } = await action(email, password);
     setBusy(false);
     if (error) setError(error);
-    else if (mode === 'signup') setInfo('가입 완료! 이메일 인증이 필요할 수 있습니다. 로그인해주세요.');
+    else if (mode === 'signup') {
+      setModeState('signin');
+      setPasswordConfirm('');
+      setInfo('가입 완료! 이메일 인증이 필요할 수 있습니다. 로그인해주세요.');
+    }
   };
 
   const handleResend = async () => {
@@ -68,7 +83,7 @@ export default function Login() {
           </p>
           <ul className="text-sm text-slate-500 space-y-1 mb-6 list-disc list-inside">
             <li>견적서 · 주문서 · 거래명세서 작성은 <b>무료</b></li>
-            <li>전자세금계산서는 팝빌 연동으로 국세청에 <b>즉시 발행</b></li>
+            <li>전자세금계산서는 국세청에 <b>즉시 발행</b></li>
             <li>거래처 · 품목 관리, 카드/가상계좌로 포인트 충전</li>
             <li>문서가 이미 시스템에 있어 <b>발행 시간이 크게 단축</b>됩니다</li>
             <li>인증서를 한 번만 등록하면 되어, 발행할 때마다 <b>보안카드를 반복 제출할 필요가 없습니다</b></li>
@@ -77,34 +92,24 @@ export default function Login() {
             <summary className="cursor-pointer font-medium text-slate-600">자주 묻는 질문</summary>
             <div className="mt-2 space-y-2">
               <p><b>Q. 견적서, 주문서, 거래명세서 작성도 유료인가요?</b><br />A. 아니요, 문서 작성과 변환은 모두 무료입니다. 세금계산서를 실제로 발행할 때만 건당 소액 포인트가 차감됩니다.</p>
-              <p><b>Q. 세금계산서는 어떻게 발행되나요?</b><br />A. 거래명세서를 세금계산서로 변환 후 발행 버튼을 누르면 팝빌을 통해 국세청에 실시간 전자발행되고, 거래처에 이메일이 자동 발송됩니다.</p>
-              <p><b>Q. 홈택스에서 직접 발행하는 것과 뭐가 다른가요?</b><br />A. 견적서 단계부터 입력한 데이터를 그대로 이어받아 발행하므로 매번 새로 입력할 필요가 없어 발행 시간이 단축됩니다. 또한 인증서를 팝빌에 한 번만 등록해두면 되어, 홈택스처럼 발행 건마다 보안카드를 반복 제출하지 않아도 됩니다.</p>
+              <p><b>Q. 세금계산서는 어떻게 발행되나요?</b><br />A. 거래명세서를 세금계산서로 변환 후 발행 버튼을 누르면 버디빌에서 국세청에 실시간 전자발행되고, 거래처에 이메일이 자동 발송됩니다.</p>
+              <p><b>Q. 홈택스에서 직접 발행하는 것과 뭐가 다른가요?</b><br />A. 견적서 단계부터 입력한 데이터를 그대로 이어받아 발행하므로 매번 새로 입력할 필요가 없어 발행 시간이 단축됩니다. 또한 인증서를 한 번만 등록해두면 되어, 홈택스처럼 발행 건마다 보안카드를 반복 제출하지 않아도 됩니다.</p>
             </div>
           </details>
         </div>
 
       <form onSubmit={submit} className="order-1 md:order-2 bg-white p-8 rounded-2xl shadow-sm border border-slate-200 w-full max-w-sm mx-auto">
-        <div className="flex rounded-lg bg-slate-100 p-1 mb-6" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'signin'}
-            onClick={() => setMode('signin')}
-            className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === 'signin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            로그인
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'signup'}
-            onClick={() => setMode('signup')}
-            className={`flex-1 py-2 rounded-md text-sm font-medium transition ${mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            회원가입 (처음이신가요?)
-          </button>
+        <div className="grid grid-cols-2 mb-6 rounded-lg bg-slate-100 p-1 text-sm font-medium">
+          {([['signin', '로그인'], ['signup', '회원가입 (처음이신가요?)']] as const).map(([m, label]) => (
+            <button key={m} type="button" onClick={() => setMode(m)}
+              className={`py-2 rounded-md ${mode === m ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              {label}
+            </button>
+          ))}
         </div>
-        <p className="text-sm text-slate-500 mb-6">견적 · 주문 · 거래명세서 · 세금계산서</p>
+        <p className="text-sm text-slate-500 mb-5">
+          {mode === 'signin' ? '가입한 이메일과 비밀번호로 로그인하세요.' : '이메일과 비밀번호만 있으면 바로 가입됩니다. 가입은 무료입니다.'}
+        </p>
 
         <label className="text-xs text-slate-500 flex flex-col gap-1 mb-3">
           이메일
@@ -112,10 +117,17 @@ export default function Login() {
             className="border border-slate-300 rounded-md px-3 py-2 text-sm" />
         </label>
         <label className="text-xs text-slate-500 flex flex-col gap-1 mb-4">
-          비밀번호
+          {mode === 'signup' ? '비밀번호 (6자 이상)' : '비밀번호'}
           <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
             className="border border-slate-300 rounded-md px-3 py-2 text-sm" />
         </label>
+        {mode === 'signup' && (
+          <label className="text-xs text-slate-500 flex flex-col gap-1 mb-4">
+            비밀번호 확인
+            <input type="password" required minLength={6} value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)}
+              className="border border-slate-300 rounded-md px-3 py-2 text-sm" />
+          </label>
+        )}
 
         {mode === 'signup' && (
           <label className="flex items-start gap-2 text-xs text-slate-600 mb-3">
@@ -135,12 +147,8 @@ export default function Login() {
           <div className="text-sm text-rose-600 mb-3">
             {error}
             {error.includes('이메일 인증이 완료되지 않았습니다') && (
-              <button
-                type="button"
-                onClick={handleResend}
-                disabled={resendBusy || !email}
-                className="block mt-1 text-xs text-rose-700 underline disabled:opacity-60"
-              >
+              <button type="button" onClick={handleResend} disabled={resendBusy || !email}
+                className="block mt-1 text-xs text-rose-700 underline disabled:opacity-60">
                 {resendBusy ? '보내는 중...' : '인증 메일 다시 보내기'}
               </button>
             )}
@@ -152,6 +160,14 @@ export default function Login() {
           className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium hover:bg-slate-800 disabled:opacity-60">
           {mode === 'signin' ? '로그인' : '회원가입'}
         </button>
+
+        {mode === 'signin' && (
+          <div className="flex justify-center gap-2 text-xs text-slate-500 mt-3">
+            <Link to="/find-account" className="hover:underline">아이디(이메일) 찾기</Link>
+            <span className="text-slate-300">|</span>
+            <Link to="/find-account?tab=password" className="hover:underline">비밀번호 찾기</Link>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 my-4">
           <div className="flex-1 h-px bg-slate-200" />

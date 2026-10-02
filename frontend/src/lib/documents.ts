@@ -20,6 +20,20 @@ export function calcItemAmounts(item: Pick<DocumentItem, 'qty' | 'unit_price'>, 
   return { supply_price: supply, tax };
 }
 
+// 합계(공급가액+세액)를 먼저 정한 경우의 역산. 세액을 10%로 따로 계산하지 않고 합계에서 빼야
+// 공급가액+세액이 입력한 합계와 정확히 일치한다. 단가는 끝전이 생길 수 있어 반올림한 참고값이다.
+export function calcFromTotal(total: number, qty: number, taxType: PartyInfo['taxType'] = '과세') {
+  const t = Math.round(total || 0);
+  const supply = taxType === '과세' ? Math.round(t / 1.1) : t;
+  return { supply_price: supply, tax: t - supply, unit_price: qty > 0 ? Math.round(supply / qty) : 0 };
+}
+
+// 공급가액을 직접 정한 경우: 세액은 10%, 단가는 끝전이 생길 수 있어 반올림한 참고값이다.
+export function calcFromSupply(supplyPrice: number, qty: number, taxType: PartyInfo['taxType'] = '과세') {
+  const supply = Math.round(supplyPrice || 0);
+  return { supply_price: supply, tax: taxType === '과세' ? Math.round(supply * 0.1) : 0, unit_price: qty > 0 ? Math.round(supply / qty) : 0 };
+}
+
 export function calcDocumentTotals(items: DocumentItem[]) {
   const supply_total = items.reduce((sum, it) => sum + (it.supply_price || 0), 0);
   const tax_total = items.reduce((sum, it) => sum + (it.tax || 0), 0);

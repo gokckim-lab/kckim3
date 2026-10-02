@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer } from '../lib/customers';
+import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, matchesCustomer } from '../lib/customers';
 import type { CustomerRecord } from '../types';
 import BizCardUpload from '../components/BizCardUpload';
 
@@ -16,6 +17,9 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState(emptyDraft());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const navigate = useNavigate();
+  const shown = list.filter((c) => matchesCustomer(c, query));
 
   const load = () => fetchCustomers().then(setList).catch((e) => notify(e.message, 'error')).finally(() => setLoading(false));
   useEffect(() => { load(); }, []);
@@ -43,7 +47,8 @@ export default function Customers() {
 
   const edit = (c: CustomerRecord) => {
     setEditingId(c.id);
-    setDraft({ biz_no: c.biz_no, name: c.name, ceo: c.ceo, address: c.address, biz_type: c.biz_type, biz_item: c.biz_item, email: c.email, tel: c.tel, contact: c.contact, memo: c.memo });
+    const d = emptyDraft();
+    setDraft(Object.fromEntries(Object.keys(d).map((k) => [k, (c as any)[k] ?? ''])) as typeof d);
   };
 
   const remove = async (id: string) => {
@@ -86,17 +91,27 @@ export default function Customers() {
       </div>
 
       <div className="col-span-2">
-        <h1 className="text-xl font-bold text-slate-800 mb-3">거래처 목록</h1>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h1 className="text-xl font-bold text-slate-800">거래처 목록 <span className="text-sm font-normal text-slate-400">{list.length}곳</span></h1>
+          <input className="border border-slate-300 rounded-md px-3 py-1.5 text-sm w-64" placeholder="상호·사업자번호·대표자 검색"
+            value={query} onChange={(e) => setQuery(e.target.value)} />
+        </div>
+        <p className="text-xs text-slate-400 mb-3">세금계산서를 발행하면 공급받는자가 이 목록에 자동으로 저장됩니다.</p>
         {loading ? <div className="text-slate-400 text-sm">불러오는 중...</div> : (
           <div className="space-y-2">
             {list.length === 0 && <div className="text-slate-400 text-sm">등록된 거래처가 없습니다.</div>}
-            {list.map((c) => (
+            {list.length > 0 && shown.length === 0 && <div className="text-slate-400 text-sm">일치하는 거래처가 없습니다.</div>}
+            {shown.map((c) => (
               <div key={c.id} className="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between">
                 <div>
                   <div className="font-medium text-slate-800">{c.name} <span className="text-xs text-slate-400 ml-1">{c.biz_no}</span></div>
                   <div className="text-xs text-slate-500">{c.ceo} · {c.address}</div>
                 </div>
-                <div className="flex gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs shrink-0">
+                  <button onClick={() => navigate(`/documents/quote/new?customerId=${c.id}`)}
+                    className="px-2 py-1 border border-slate-300 rounded-md hover:bg-slate-50">견적서 작성</button>
+                  <button onClick={() => navigate(`/documents/tax_invoice/new?customerId=${c.id}`)}
+                    className="px-2 py-1 bg-emerald-600 text-white rounded-md hover:bg-emerald-700">세금계산서 작성</button>
                   <button onClick={() => edit(c)} className="text-blue-600 hover:underline">수정</button>
                   <button onClick={() => remove(c.id)} className="text-rose-600 hover:underline">삭제</button>
                 </div>

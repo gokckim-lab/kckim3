@@ -81,6 +81,20 @@ export async function sendContactMessage(subject: string, message: string) {
   return handle(res);
 }
 
+const postPublic = (path: string, body: unknown) =>
+  fetch(`${BASE_URL}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(handle);
+
+export function requestPasswordReset(email: string) {
+  return postPublic('/api/account/password-reset', { email });
+}
+
+export interface FoundAccount { email: string; google: boolean; createdAt: string }
+
+export async function findEmailByBizNo(bizNo: string): Promise<FoundAccount[]> {
+  const body = await postPublic('/api/account/find-email', { bizNo });
+  return body.accounts;
+}
+
 export async function deleteAccount() {
   const headers = await authHeaders();
   const res = await fetch(`${BASE_URL}/api/account`, {

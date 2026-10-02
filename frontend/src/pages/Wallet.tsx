@@ -176,7 +176,7 @@ export default function Wallet() {
     <div className="max-w-3xl mx-auto p-6 space-y-4">
       <h1 className="text-xl font-bold text-slate-800">포인트 지갑</h1>
       <p className="text-sm text-slate-500">
-        견적서 · 주문서 · 거래명세서는 무료입니다. 세금계산서를 팝빌로 <b>발행</b>할 때만 건당 포인트가 차감됩니다.
+        견적서 · 주문서 · 거래명세서는 무료입니다. 세금계산서를 <b>발행</b>할 때만 건당 포인트가 차감됩니다.
         무통장입금으로 충전 신청을 하면 확인 후 반영됩니다.
       </p>
 

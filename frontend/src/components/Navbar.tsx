@@ -1,5 +1,7 @@
+import { useSyncExternalStore } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { canInstall, promptInstall, subscribeInstall } from '../lib/installPrompt';
 
 const DOC_LINKS = [
   { to: '/documents/quote', label: '견적서' },
@@ -18,6 +20,7 @@ const MEMBER_LINKS = [
 
 export default function Navbar() {
   const { signOut, user, isAdmin } = useAuth();
+  const installable = useSyncExternalStore(subscribeInstall, canInstall);
   const links = !user
     ? DOC_LINKS
     : isAdmin
@@ -48,6 +51,12 @@ export default function Navbar() {
           ))}
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-300 shrink-0 ml-2">
+          {installable && (
+            <button onClick={promptInstall} title="바탕화면 아이콘으로 버디빌을 프로그램처럼 실행합니다"
+              className="px-3 py-1.5 rounded-md border border-slate-600 hover:bg-slate-800 whitespace-nowrap">
+              앱 설치
+            </button>
+          )}
           {user ? (
             <>
               <span className="text-xs whitespace-nowrap hidden sm:inline">{user.email}</span>
