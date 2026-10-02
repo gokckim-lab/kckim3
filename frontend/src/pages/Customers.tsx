@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, matchesCustomer } from '../lib/customers';
 import type { CustomerRecord } from '../types';
 import BizCardUpload from '../components/BizCardUpload';
+import ExcelTools from '../components/ExcelTools';
 
 const emptyDraft = () => ({
   biz_no: '', name: '', ceo: '', address: '', biz_type: '', biz_item: '', email: '', tel: '', contact: '', memo: '',
@@ -97,6 +98,7 @@ export default function Customers() {
             value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <p className="text-xs text-slate-400 mb-3">세금계산서를 발행하면 공급받는자가 이 목록에 자동으로 저장됩니다.</p>
+        {user && <ExcelTools kind="customers" ownerId={user.id} existing={list} onDone={load} />}
         {loading ? <div className="text-slate-400 text-sm">불러오는 중...</div> : (
           <div className="space-y-2">
             {list.length === 0 && <div className="text-slate-400 text-sm">등록된 거래처가 없습니다.</div>}

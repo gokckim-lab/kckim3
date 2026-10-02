@@ -17,7 +17,7 @@ function loadScript(src: string, globalName: string): Promise<any> {
   });
 }
 
-const loadXlsx = () => loadScript('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js', 'XLSX');
+export const loadXlsx = () => loadScript('https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js', 'XLSX');
 const loadJsZip = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip');
 
 type Cell = { col: number; text: string };
@@ -50,10 +50,9 @@ export function unsupportedOfficeMessage(file: File): string | null {
   return null;
 }
 
-async function excelLines(file: File): Promise<TextLine[]> {
+export async function readWorkbook(file: File) {
   const XLSX = await loadXlsx();
   const buf = await file.arrayBuffer();
-  let wb;
   if (file.name.toLowerCase().endsWith('.csv')) {
     let text: string;
     try {
@@ -61,10 +60,13 @@ async function excelLines(file: File): Promise<TextLine[]> {
     } catch {
       text = new TextDecoder('euc-kr').decode(buf);
     }
-    wb = XLSX.read(text, { type: 'string' });
-  } else {
-    wb = XLSX.read(buf, { type: 'array' });
+    return { XLSX, wb: XLSX.read(text, { type: 'string' }) };
   }
+  return { XLSX, wb: XLSX.read(buf, { type: 'array' }) };
+}
+
+async function excelLines(file: File): Promise<TextLine[]> {
+  const { XLSX, wb } = await readWorkbook(file);
   const rows: Cell[][] = [];
   for (const sheetName of wb.SheetNames.slice(0, 3)) {
     const data: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, raw: false, defval: '' });
