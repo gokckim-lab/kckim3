@@ -41,7 +41,9 @@ export default function ItemTable({ items, onChange, taxType, readOnly, products
   return (
     <div className="bg-white rounded-xl border border-slate-200">
       {/* table-fixed: 입력칸의 기본 최소 너비 때문에 숫자 칸들이 커지고 품목칸만 좁아지는 것을 막고, 남는 폭을 품목칸에 몰아준다 */}
-      <table className="w-full text-sm table-fixed">
+      {/* 휴대폰처럼 좁은 화면에서는 품목칸이 0이 되어 규격과 겹치므로, 최소 폭을 두고 표만 가로로 밀어 보게 한다 */}
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[780px] text-sm table-fixed">
         <thead className="bg-slate-50 text-slate-500 text-xs">
           <tr>
             <th className="p-2 text-left w-8 rounded-tl-xl">#</th>
@@ -94,6 +96,7 @@ export default function ItemTable({ items, onChange, taxType, readOnly, products
           ))}
         </tbody>
       </table>
+      </div>
       {!readOnly && (
         <button type="button" onClick={addRow} className="w-full text-sm text-blue-600 py-2 hover:bg-blue-50 print:hidden">
           + 품목 추가
