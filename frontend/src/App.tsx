@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { migrateGuestData } from './lib/docStore';
@@ -7,6 +7,8 @@ import { hasGuestData } from './lib/guestStore';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
+import Landing from './pages/Landing';
+import { Analytics } from '@vercel/analytics/react';
 import CompanyProfile from './pages/CompanyProfile';
 import Customers from './pages/Customers';
 import Products from './pages/Products';
@@ -56,7 +58,7 @@ function Shell() {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/find-account" element={<AccountRecovery />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/" element={<Navigate to="/documents/quote" replace />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/profile" element={<ProtectedRoute><CompanyProfile /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
@@ -81,6 +83,7 @@ export default function App() {
           <Shell />
         </AuthProvider>
       </ToastProvider>
+      <Analytics />
     </BrowserRouter>
   );
 }
