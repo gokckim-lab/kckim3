@@ -63,9 +63,14 @@ export default function Navbar() {
               <button onClick={signOut} className="px-3 py-1.5 rounded-md hover:bg-slate-800 whitespace-nowrap">로그아웃</button>
             </>
           ) : (
-            <Link to="/login?mode=signup" className="px-3 py-1.5 rounded-md bg-white text-slate-900 font-medium whitespace-nowrap hover:bg-slate-100">
-              회원가입
-            </Link>
+            <>
+              <Link to="/login" className="px-3 py-1.5 rounded-md text-slate-200 whitespace-nowrap hover:bg-slate-800">
+                로그인
+              </Link>
+              <Link to="/login?mode=signup" className="px-3 py-1.5 rounded-md bg-white text-slate-900 font-medium whitespace-nowrap hover:bg-slate-100">
+                회원가입
+              </Link>
+            </>
           )}
         </div>
       </div>
