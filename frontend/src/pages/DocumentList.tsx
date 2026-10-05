@@ -92,6 +92,20 @@ export default function DocumentList() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
       <GuestBanner />
+      {user && type === 'quote' && !loading && list.length === 0 && (
+        <div className="bg-violet-50 border border-violet-200 rounded-xl p-5 print:hidden">
+          <h2 className="font-bold text-slate-800 mb-1">가입을 환영합니다! 첫 견적서를 만들어 보세요</h2>
+          <ol className="text-sm text-slate-600 list-decimal list-inside space-y-0.5 mb-4">
+            <li>거래처와 품목을 입력해 견적서를 저장합니다 (사업자등록증을 올리면 자동으로 채워져요)</li>
+            <li>저장한 견적서를 주문서 → 거래명세서 → 세금계산서로 버튼 한 번에 변환합니다</li>
+            <li>세금계산서 발행 때만 포인트가 차감됩니다. 문서 작성은 모두 무료입니다</li>
+          </ol>
+          <button onClick={() => navigate('/documents/quote/new')}
+            className="bg-slate-900 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-slate-800">
+            첫 견적서 만들기
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800">{label} 목록</h1>
         <div className="flex items-center gap-2">
